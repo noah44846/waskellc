@@ -15,6 +15,8 @@
         devShell = pkgs.mkShell {
           packages = with pkgs; [
             mermaid-cli
+            pandoc
+            texliveTeTeX
           ];
 
           GIT_CONFIG_GLOBAL =
