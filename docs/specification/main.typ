@@ -23,6 +23,11 @@
     date: datetime(year: 2024, month: 05, day: 27),
     changes: [First version],
   ),
+  (
+    version: "0.2",
+    date: datetime(year: 2024, month: 05, day: 30),
+    changes: [Reduce the scope of the project to a subset of an existing functional language and direct mentions to LLVM.],
+  ),
 )
 
 #show: doc => report(
@@ -55,63 +60,127 @@ The functional programming paradigm offers significant advantages for certain ty
 
 WebAssembly (Wasm) is a portable and high-performance bytecode format designed to execute code at near-native speeds. It allows code written in various programming languages like C, C++, Rust, and others to be compiled to Wasm bytecode, which can then run in environments such as web browsers and Wasm runtimes like Wasmer.
 
-By developing a new functional programming language that compiles to Wasm, we can combine the benefits of functional programming with the performance and portability of Wasm. This approach would enable seamless integration and embedding of high-performance functional code into existing codebases written in different languages. Developers could utilize the strengths of functional programming for specific parts of their projects, while leveraging other paradigms for the remaining codebase.
+By developing a compiler for a functional programming language (a subset of an already existing one) that compiles to Wasm, we can combine the benefits of functional programming with the performance and portability of Wasm. This approach would enable seamless integration and embedding of high-performance functional code into existing codebases written in different languages. Developers could utilize the strengths of functional programming for specific parts of their projects, while leveraging other paradigms for the remaining codebase.
 
-To generate efficient machine code for the new functional programming language, we will leverage the LLVM framework. LLVM is a modular and extensible compiler framework that supports a wide range of programming languages and processor architectures. Notably, LLVM supports Wasm as a compilation target, allowing it to generate optimized Wasm bytecode from an intermediate representation called LLVM IR. One of LLVM's key advantages is its ability to generate highly optimized machine code for various platforms, including Wasm, ensuring optimal performance for the compiled functional language.
+Embedding is the process of integrating code written in one programming language into a codebase written in another language. In this project, we aim to demonstrate the embedding of the new functional programming language compiled to Wasm into existing codebases written in other languages. This will showcase the interoperability and potential for combining different programming paradigms within the same project. @img_embedding illustrates the concept of embedding a Wasm module into a codebase.
+
+#figure(
+  image("img/embedding.png", width: 60%),
+  caption: [Illustration of embedding a Wasm module into a codebase.],
+) <img_embedding>
 
 = Objectives
 
 Upon the completion of the project, the following objectives will be achieved:
 
-- *Functional Programming Language Specification*: A comprehensive specification defining the syntax, semantics, and features of a new functional programming language, incorporating key concepts such as pattern matching, first-class functions, immutable data structures, a simple type system, a module system for organizing and encapsulating code, and a minimal standard library.
+- *Functional Programming Language Specification*: A specification of a functional programming language that is a subset of an existing functional language, tailored for efficient compilation to Wasm bytecode and seamless embedding into existing codebases. A subset of the standard library will be defined to support the language features.
 
-- *Functioning Compiler*: A fully operational compiler capable of translating the defined functional programming language into efficient Wasm bytecode, enabling high-performance execution across various environments and platforms. While not the primary focus, the compiler should also support generating native executables, although the primary target will be Wasm.
+- *Functioning Compiler*: A fully operational compiler capable of translating the defined functional programming language into efficient Wasm bytecode, enabling high-performance execution across various environments and platforms. The compiled code should be able to seamlessly interact with other programming languages its embedded into.
 
-- *Language Documentation*: Extensive documentation detailing the usage and development of the new functional programming language, including examples, and reference materials to facilitate learning and adoption by developers.
+- *Language Documentation*: A documentation detailing the usage and development of the new functional programming language, including examples, and reference materials to facilitate learning and adoption by developers. Examples of embedding the language into existing codebases of different languages will be provided.
 
-- *Integration Examples*: A collection of examples demonstrating the integration and execution of the compiled Wasm code within different programming languages and frameworks, showcasing the language's interoperability and potential for seamless embedding.
-
-- *Embedding Demonstrations*: Practical demonstrations illustrating the embedding and utilization of the new functional language within existing codebases written in other programming languages, highlighting its ability to coexist with and complement other programming paradigms.
-
-By achieving these objectives, the project will deliver a well-defined functional programming language optimized for Wasm execution, along with a functioning compiler, documentation, integration examples, and embedding demonstrations. While not production-ready after the 7-week timeline, the project will serve as a proof of concept and a foundation for potential further development, with the potential for future adoption and integration into codebases.
+By achieving these objectives, the project will deliver a well-defined functional programming language optimized for Wasm execution, along with a functioning compiler, documentation, and embedding demonstrations. While not production-ready after the 7-week timeline, the project will serve as a proof of concept and a foundation for potential further development.
 
 = Tasks
 
 #set enum(numbering: "1.1.", full: true)
 
 + *Define Language Specification*
-  + Conduct research on existing functional programming languages and their features.
-  + Specify the syntax, semantics, and core language features, including pattern matching, first-class functions, immutable data structures, type system, and module system.
+  + Conduct research on existing functional programming languages and choose a suitable language to base the new language on.
+    - _Deliverable_: A chapter in the project report detailing the chosen language, the subset of features to include, and the modifications required for efficient compilation to Wasm.
+    - _Estimated time_: 2 days
   + Design the requirements and structure for a minimal standard library.
+    - _Deliverable_: A chapter in the project report outlining the standard library features that will be implemented.
+    - _Estimated time_: 1 day
 + *Develop Compiler*
-  + Research the requirements and best practices for compiling to Wasm using LLVM and what language to use for the front-end.
-  + Implement a minimal viable compiler (lexer, parser and LLVM-IR code generation) for the new functional language with limited features.
-  + Configure and integrate LLVM to generate Wasm bytecode (and native code) from the LLVM-IR output.
-  + Optimize the compiler to generate efficient Wasm code and explore LLVM optimizations for the generated code.
+  + Research different code generation strategies and tools for compiling to Wasm and choose the most suitable approach.
+    - _Deliverable_: A chapter in the project report detailing the choice of code generation strategy and tools and a small proof of concept.
+    - _Estimated time_: 2 days
+  + Implement a minimal viable compiler (lexer, parser and code generation) for the new functional language with limited features.
+    - _Deliverable_: A working compiler that can generate simple Wasm bytecode from the input language and a chapter in the project report detailing the implementation.
+    - _Estimated timer_: 5 days
   + Implement the remaining language features and optimizations to complete the compiler.
+    - _Deliverable_: A fully functional compiler capable of translating the entire language subset to Wasm bytecode.
+    - _Estimated time_: 6 days
   + Implement a simple standard library for the language.
-+ *Testing and Validation*
+    - _Deliverable_: A working standard library that supports the language features and a chapter in the project report.
+    - _Estimated time_: 3 days
+
+#pagebreak()
+
+3. *Testing and Validation*
   + Develop an automated test suite to validate the correctness of the compiler and the Wasm bytecode.
+    - _Deliverable_: Working test suite and a chapter in the project report detailing the testing strategy.
+    - _Estimated time_: 3 days
   + Perform testing of code embedding and execution in different environments and platforms.
+    - _Deliverable_: A chapter in the project report detailing the testing results and validation.
+    - _Estimated time_: 2 days
   + Conduct performance benchmarking and analysis to evaluate the efficiency of the compiled code.
+    - _Deliverable_: A chapter in the project report detailing the benchmarking methodology, results, and analysis.
+    - _Estimated time_: 1 days
 + *Create Language Documentation*
-  + Draft comprehensive documentation covering the language syntax, semantics, features, and a reference for the standard library.
   + Develop examples to facilitate learning and adoption of the language and its embedded use cases.
+    - _Deliverable_: A set of examples demonstrating the language features and embedding capabilities.
+    - _Estimated time_: 3 days
+  + Draft a documentation covering the language syntax, semantics, features, and a reference for the standard library.
+    - _Deliverable_: A small documentation of the language and standard library.
+    - _Estimated time_: 2 days
 + *Project Documentation*
   + Write a requirements specification document outlining the context, objectives, tasks, and planning for the project.
+    - _Deliverable_: A detailed requirements specification document.
+    - _Estimated time_: 4 day
   + Prepare a detailed project report documenting the design, implementation, and evaluation of the language and compiler.
-
-#set page(flipped: true)
+    - _Deliverable_: A comprehensive project report.
+    - _Estimated time_: 30 days (ongoing throughout the project)
 
 = Planning
 
-@img_gantt shows the Gantt chart representing the project timeline and tasks.
+@tbl_timeline illustrates the project timeline and tasks for the 7-week duration.
 
-#align(horizon + center)[
-  #figure(
-    image("img/gantt.png", width: 100%),
-    caption: [Gantt chart showing the project timeline and tasks.],
-  ) <img_gantt>
+#figure(
+  table(
+    columns: 3, 
+    inset: 6pt,
+    stroke: none,
+    align: left,
+    table.header([*Week*], [*Description*], [*Deliverables*]),
+    table.hline(stroke: 1pt),
+    table.vline(stroke: 1pt, x: 1),
+    table.vline(stroke: 1pt, x: 2),
+    [Week 1], [Write the requirements specification document and start the project report.], [The requirements specification document.],
+    table.hline(stroke: 0.5pt),
+    [Week 2], [Define the language specification, design the standard library and research code generation strategies.], [The chapters in the project report detailing the language specification, standard library design, and code generation strategy.],
+    table.hline(stroke: 0.5pt),
+    [Week 3], [Implement the lexer, parser, and code generation for a minimal viable compiler.], [A working compiler that can generate simple Wasm bytecode and a chapter in the project report detailing the implementation.],
+    table.hline(stroke: 0.5pt),
+    [Week 4], [Implement some remaining language features.], [A functional compiler capable of translating a big part of the language to Wasm bytecode.],
+    table.hline(stroke: 0.5pt),
+    [Week 5], [Finish the compiler implementation and implement a simple standard library.], [A fully functional compiler capable of translating the entire language subset to Wasm bytecode and a chapter in the project report detailing the standard library implementation.],
+    table.hline(stroke: 0.5pt),
+    [Week 6], [Develop an automated test suite, test code embedding and execution, and conduct performance benchmarking.], [A chapter in the project report detailing the testing strategy, results, and benchmarking methodology, results, and analysis.],
+    table.hline(stroke: 0.5pt),
+    [Week 7], [Draft comprehensive language documentation and examples.], [A chapter in the project report detailing the documentation structure and content, and examples for learning and adoption.],
+  ),
+  caption: [Project timeline and tasks.],
+) <tbl_timeline>
+
+#pagebreak()
+
+The project will be divided into 7 weeks, with each week focusing on specific tasks and deliverables. The timeline is designed to ensure a structured and organized approach to the project, allowing for the completion of the defined objectives within the allocated time frame.
+
+The project will follow an iterative development process, with continuous testing and validation (where appropriate) to ensure the quality and correctness of the compiler and language implementation.
+
+#set page(flipped: true)
+
+#align(horizon)[
+  @img_gantt shows the Gantt chart representing the project timeline and tasks.
+  
+  #align(center)[
+    #figure(
+      image("img/gantt.png", width: 100%),
+      caption: [Gantt chart showing the project timeline and tasks.],
+    ) <img_gantt>
+  ]
 ]
 
 #set page(flipped: false)
