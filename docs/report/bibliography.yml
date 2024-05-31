@@ -1,0 +1,16 @@
+spec_doc:
+  type: Report
+  title: Functional language compiler to WebAssembly - Specification
+  date: 2024
+  author: Noah Godel
+  location: Fribourg, Switzerland
+  organization: HEIA-FR / HTA-FR
+  language: English
+  note: This document is in the appendix
+
+#word_puzzle_clp_code:
+  #type: Web
+  #title: Word puzzle CLP program provided as an example for the GNU Prolog CLP library
+  #author: Daniel Diaz
+  #url: https://github.com/maandree/gprolog/blob/master/examples/ExamplesFD/alpha.pl
+  #date: 2009

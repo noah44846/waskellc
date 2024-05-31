@@ -28,6 +28,11 @@
     date: datetime(year: 2024, month: 05, day: 30),
     changes: [Reduce the scope of the project to a subset of an existing functional language and direct mentions to LLVM.],
   ),
+  (
+    version: "1.0",
+    date: datetime(year: 2024, month: 06, day: 05),
+    changes: [Minor corrections and final version.],
+  ),
 )
 
 #show: doc => report(
@@ -40,7 +45,7 @@
     Functional language compiler to WebAssembly
   ],
   subtitle: [
-    Technical documentation
+    Requirements specification
   ],
   authors: (
     (firstname: "Noah", lastname: "Godel", gender: "h"),
@@ -60,7 +65,7 @@ The functional programming paradigm offers significant advantages for certain ty
 
 WebAssembly (Wasm) is a portable and high-performance bytecode format designed to execute code at near-native speeds. It allows code written in various programming languages like C, C++, Rust, and others to be compiled to Wasm bytecode, which can then run in environments such as web browsers and Wasm runtimes like Wasmer.
 
-By developing a compiler for a functional programming language (a subset of an already existing one) that compiles to Wasm, we can combine the benefits of functional programming with the performance and portability of Wasm. This approach would enable seamless integration and embedding of high-performance functional code into existing codebases written in different languages. Developers could utilize the strengths of functional programming for specific parts of their projects, while leveraging other paradigms for the remaining codebase.
+By developing a compiler for a functional programming language, or in this case, a subset of an already existing one, that compiles to Wasm, we can combine the benefits of functional programming with the performance and portability of Wasm. This approach would enable seamless integration and embedding of high-performance functional code into existing codebases written in different languages. Developers could utilize the strengths of functional programming for specific parts of their projects, while leveraging other paradigms for the remaining codebase.
 
 Embedding is the process of integrating code written in one programming language into a codebase written in another language. In this project, we aim to demonstrate the embedding of the new functional programming language compiled to Wasm into existing codebases written in other languages. This will showcase the interoperability and potential for combining different programming paradigms within the same project. @img_embedding illustrates the concept of embedding a Wasm module into a codebase.
 
@@ -88,50 +93,50 @@ By achieving these objectives, the project will deliver a well-defined functiona
 + *Define Language Specification*
   + Conduct research on existing functional programming languages and choose a suitable language to base the new language on.
     - _Deliverable_: A chapter in the project report detailing the chosen language, the subset of features to include, and the modifications required for efficient compilation to Wasm.
-    - _Estimated time_: 2 days
+    - _Estimated workload_: 2 days
   + Design the requirements and structure for a minimal standard library.
     - _Deliverable_: A chapter in the project report outlining the standard library features that will be implemented.
-    - _Estimated time_: 1 day
+    - _Estimated workload_: 1 day
 + *Develop Compiler*
   + Research different code generation strategies and tools for compiling to Wasm and choose the most suitable approach.
     - _Deliverable_: A chapter in the project report detailing the choice of code generation strategy and tools and a small proof of concept.
-    - _Estimated time_: 2 days
+    - _Estimated workload_: 2 days
   + Implement a minimal viable compiler (lexer, parser and code generation) for the new functional language with limited features.
     - _Deliverable_: A working compiler that can generate simple Wasm bytecode from the input language and a chapter in the project report detailing the implementation.
-    - _Estimated timer_: 5 days
+    - _Estimated workload_: 5 days
   + Implement the remaining language features and optimizations to complete the compiler.
     - _Deliverable_: A fully functional compiler capable of translating the entire language subset to Wasm bytecode.
-    - _Estimated time_: 6 days
+    - _Estimated workload_: 6 days
   + Implement a simple standard library for the language.
     - _Deliverable_: A working standard library that supports the language features and a chapter in the project report.
-    - _Estimated time_: 3 days
+    - _Estimated workload_: 3 days
 
 #pagebreak()
 
 3. *Testing and Validation*
   + Develop an automated test suite to validate the correctness of the compiler and the Wasm bytecode.
     - _Deliverable_: Working test suite and a chapter in the project report detailing the testing strategy.
-    - _Estimated time_: 3 days
+    - _Estimated workload_: 3 days
   + Perform testing of code embedding and execution in different environments and platforms.
     - _Deliverable_: A chapter in the project report detailing the testing results and validation.
-    - _Estimated time_: 2 days
+    - _Estimated workload_: 2 days
   + Conduct performance benchmarking and analysis to evaluate the efficiency of the compiled code.
     - _Deliverable_: A chapter in the project report detailing the benchmarking methodology, results, and analysis.
-    - _Estimated time_: 1 days
+    - _Estimated workload_: 1 day
 + *Create Language Documentation*
   + Develop examples to facilitate learning and adoption of the language and its embedded use cases.
     - _Deliverable_: A set of examples demonstrating the language features and embedding capabilities.
-    - _Estimated time_: 3 days
+    - _Estimated workload_: 3 days
   + Draft a documentation covering the language syntax, semantics, features, and a reference for the standard library.
     - _Deliverable_: A small documentation of the language and standard library.
-    - _Estimated time_: 2 days
+    - _Estimated workload_: 2 days
 + *Project Documentation*
   + Write a requirements specification document outlining the context, objectives, tasks, and planning for the project.
     - _Deliverable_: A detailed requirements specification document.
-    - _Estimated time_: 4 day
+    - _Estimated workload_: 4 days
   + Prepare a detailed project report documenting the design, implementation, and evaluation of the language and compiler.
     - _Deliverable_: A comprehensive project report.
-    - _Estimated time_: 30 days (ongoing throughout the project)
+    - _Estimated workload_: 8 days (ongoing throughout the project)
 
 = Planning
 

@@ -1,0 +1,36 @@
+[github_copilot]
+short = "GitHub Copilot"
+desc = "GitHub Copilot is an AI pair programmer that uses AI to make context related code suggestions."
+
+[claude_ai]
+short = "Claude AI"
+desc = "Claude AI is a LLM based AI chat bot by Anthropic."
+
+[heiafr]
+short = "HEIA-FR"
+long = "Haute école d'ingénierie et d'architecture de Fribourg"
+desc = "The Haute école d'ingénierie et d'architecture de Fribourg (HEIA-FR) is a technical school of applied sciences located in Fribourg, Switzerland. The name in english is: School of Engineering and Architecture of Fribourg."
+
+[llvm]
+short = "LLVM"
+desc = "The LLVM Project is a collection of modular and reusable compiler and toolchain technologies. Despite its name, LLVM has little to do with traditional virtual machines. The name 'LLVM' itself is not an acronym; it is the full name of the project."
+
+[wasm]
+short = "Wasm"
+long = "WebAssembly"
+desc = "WebAssembly (often shortened to Wasm) is a binary instruction format for a stack-based virtual machine. Wasm is designed as a portable target for compilation of high-level languages like C/C++/Rust, enabling deployment on the web for client and server applications."
+
+[wasm_runtime]
+short = "Wasm runtime"
+plural = "Wasm runtimes"
+desc = "A WebAssembly runtime is a software that executes WebAssembly code. It can be a standalone runtime like Wasmtime or integrated into a larger software like a web browser."
+
+[wasmtime]
+short = "Wasmtime"
+desc = "Wasmtime is a standalone WebAssembly runtime that can be used to run WebAssembly code outside of a web browser."
+group = "Wasm runtimes"
+
+[wasmer]
+short = "Wasmer"
+desc = "Wasmer is a standalone WebAssembly runtime that can be used to run WebAssembly code outside of a web browser."
+group = "Wasm runtimes"
