@@ -136,7 +136,7 @@ By achieving these objectives, the project will deliver a well-defined functiona
     - _Estimated workload_: 4 days
   + Prepare a detailed project report documenting the design, implementation, and evaluation of the language and compiler.
     - _Deliverable_: A comprehensive project report.
-    - _Estimated workload_: 8 days (ongoing throughout the project)
+    - _Estimated workload_: 8 days (ongoing throughout the project, included in the tasks themselves)
 
 = Planning
 
@@ -175,6 +175,10 @@ The project will be divided into 7 weeks, with each week focusing on specific ta
 
 The project will follow an iterative development process, with continuous testing and validation (where appropriate) to ensure the quality and correctness of the compiler and language implementation.
 
+#heading(level: 2, numbering: none, outlined: false)[Project management tools]
+
+The project will utilize git for version control, allowing for tracking changes to the codebase. Gitlab issues will be used to manage tasks, and track progress. An issue will be created for each task, detailing the task description, estimated workload, and deadline.
+
 #set page(flipped: true)
 
 #align(horizon)[
@@ -182,7 +186,7 @@ The project will follow an iterative development process, with continuous testin
   
   #align(center)[
     #figure(
-      image("img/gantt.png", width: 100%),
+      image("img/gantt.png"),
       caption: [Gantt chart showing the project timeline and tasks.],
     ) <img_gantt>
   ]
