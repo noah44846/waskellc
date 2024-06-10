@@ -109,9 +109,81 @@ This document is structured as follows.
 - _Evaluation_: Discusses the evaluation of the compiler and standard library.
 - _Conclusion_: Summarizes the project, highlights achievements, and outlines future work.
 
+#todo("maybe add a chapter about planning and sprints")
+
 = Analysis
 
+This section presents the constraints, the exploration of different technologies and features and the technological choices.
+
+== Choice of language for the subset
+
+In this project, the choice of the language subset is crucial. The language should be expressive enough to demonstrate the functional programming paradigm's benefits while being simple enough to implement within the project's timeframe. The language should also be a subset of an existing language to so that the task of having to specify the language's syntax and semantics is simplified.
+
+The following languages were considered for the project.
+
+#todo("add choice of language subset (specify the Wasm compatibility, the functional features, the standard library)")
+
+=== OCaml
+
+=== F\#
+
+=== Lisp languages
+
+=== BEAM languages
+
+#gls("beam")
+
+=== Haskell
+
+== Choice of compiler technology
+
+The choice of compiler technology is essential for the project's success. The compiler should be able to translate the functional language subset into efficient #glss("wasm") bytecode. The following technologies were considered for the project.
+
+#todo("add choice of compiler technology (specify the Wasm compatibility, the functional features, the standard library)")
+
+=== LLVM
+
+=== Manual translation
+
+== Embedding the Wasm module into a codebase
+
+The embedding of the #glss("wasm") module into a codebase is a crucial aspect of the project. The #glss("wasm") module should be able to interact with the host codebase seamlessly. The following technologies were considered for the project.
+
+#todo("add embedding technologies (specify the Wasm compatibility, the functional features, the standard library), interface types ??? => (https://docs.wasmer.io/wai)")
+
+=== Wasmer
+
+=== Wasmtime
+
+=== Wasmtime with WebAssembly Component Model
+
+== How the GHC Haskell compiler works
+
+== Other technological choices
+
+#todo("add other technological choices")
+
+=== Gitlab
+
+=== Typst
+
+=== Language for the compiler
+
 = Design
+
+This section describes the design of the functional language, compiler, and standard library. It includes the lexical and context-free syntax of the language, the compiler's architecture, and the standard library's design.
+
+#todo("add design of the functional language, compiler, and standard library")
+
+== Lexical syntax
+
+== Context-free syntax
+
+== Compiler architecture
+
+== Language features
+
+== Standard library design
 
 = Implementation
 
