@@ -1,0 +1,5 @@
+package example:hello;
+
+world test {
+    export f: func() -> string;
+}

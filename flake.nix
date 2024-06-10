@@ -13,11 +13,28 @@
         flakedPkgs = pkgs;
 
         devShell = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            pkg-config
+          ];
+
           packages = with pkgs; [
             mermaid-cli
             pandoc
             texliveTeTeX
+
+            cargo-wasi
+            cargo-component
+
+            openssl
+            
+            wasmtime
+            wasm-tools
+
+            nodejs_20
+            nodePackages.npm
           ];
+
+          PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig";
 
           GIT_CONFIG_GLOBAL =
             pkgs.writeText
