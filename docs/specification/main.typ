@@ -80,7 +80,7 @@ Upon the completion of the project, the following objectives will be achieved:
 
 - *Functional Programming Language Specification*: A specification of a functional programming language that is a subset of an existing functional language, tailored for efficient compilation to Wasm bytecode and seamless embedding into existing codebases. A subset of the standard library will be defined to support the language features.
 
-- *Functioning Compiler*: A fully operational compiler capable of translating the defined functional programming language into efficient Wasm bytecode, enabling high-performance execution across various environments and platforms. The compiled code should be able to seamlessly interact with other programming languages its embedded into.
+- *Functioning Compiler*: A fully operational compiler capable of translating the defined functional programming language into efficient Wasm bytecode, enabling high-performance execution across various environments and platforms. The compiled code should be able to seamlessly interact with other programming languages into which it is embedded.
 
 - *Language Documentation*: A documentation detailing the usage and development of the new functional programming language, including examples, and reference materials to facilitate learning and adoption by developers. Examples of embedding the language into existing codebases of different languages will be provided.
 
@@ -101,8 +101,8 @@ By achieving these objectives, the project will deliver a well-defined functiona
   + Research different code generation strategies and tools for compiling to Wasm and choose the most suitable approach.
     - _Deliverable_: A chapter in the project report detailing the choice of code generation strategy and tools and a small proof of concept.
     - _Estimated workload_: 2 days
-  + Implement a minimal viable compiler (lexer, parser and code generation) for the new functional language with limited features.
-    - _Deliverable_: A working compiler that can generate simple Wasm bytecode from the input language and a chapter in the project report detailing the implementation.
+  + Implement a minimal viable compiler (lexer, parser, and code generation) for the new functional language with limited features.
+    - _Deliverable_: A working compiler that can generate simple Wasm bytecode from the input language, and a chapter in the project report detailing the implementation.
     - _Estimated workload_: 5 days
   + Implement the remaining language features and optimizations to complete the compiler.
     - _Deliverable_: A fully functional compiler capable of translating the entire language subset to Wasm bytecode.
@@ -173,7 +173,7 @@ By achieving these objectives, the project will deliver a well-defined functiona
 
 The project will be divided into 7 weeks, with each week focusing on specific tasks and deliverables. The timeline is designed to ensure a structured and organized approach to the project, allowing for the completion of the defined objectives within the allocated time frame.
 
-The project will follow an iterative development process, with continuous testing and validation (where appropriate) to ensure the quality and correctness of the compiler and language implementation.
+The project will follow an iterative development process, with continuous testing and validation (where appropriate), to ensure the quality and correctness of the compiler and language implementation.
 
 #heading(level: 2, numbering: none, outlined: false)[Project management tools]
 
