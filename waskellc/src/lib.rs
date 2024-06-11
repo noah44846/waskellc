@@ -32,7 +32,14 @@ pub enum Token {
     Special(char),
 
     #[regex(r"\d+", |lex| lex.slice().parse::<i64>().unwrap())]
-    Number(i64),
+    Integer(i64),
+    
+    // TODO: floating point numbers
+    // TODO: escape sequences
+    // TODO: layout rule
+
+    #[regex(r#"'.*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
+    Char(char),
     
     #[regex(r#""[^"]*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_owned())]
     String(String),
@@ -55,6 +62,8 @@ fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
     }
 }
 
+// TODO: labeled fields on constructors??
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct TopDeclarations(Vec<TopDeclaration>);
@@ -64,8 +73,8 @@ impl TopDeclarations {
         let mut top_declarations = vec![];
         loop {
             top_declarations.push(TopDeclaration::parse(input)?);
-            if let None = input.next() {
-                break;
+            if input.peek().is_none() {
+                break
             }
         }
         
@@ -78,6 +87,7 @@ pub enum TopDeclaration {
     //TypeDecl(TypeDeclaration),
     //DataDecl(DataDeclaration),
     //NewTypeDecl(NewTypeDeclaration),
+    //FixityDecl(FixityDeclaration),
     // may be a list of type variables
     TypeSig(String, FunctionType),
     FunctionDecl(FunctionDeclaration),
@@ -101,12 +111,13 @@ impl TopDeclaration {
                     _ => Err(format!("Unexpected token: {}", ident)),
                 }
             },
-            Token::VariableIdent(ident) => {
-                match next_token(input, false)? {
-                    Token::ReservedOperator(op) if op == "::" =>
-                        Ok(TopDeclaration::TypeSig(ident, FunctionType::parse(input)?)),
-                    _ => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(input)?)),
-                }
+            // TODO: support (&*) as variables
+            Token::VariableIdent(ident) => match next_token(input, true)? {
+                Token::ReservedOperator(op) if op == "::" => {
+                    input.next(); // consume the '::'
+                    Ok(TopDeclaration::TypeSig(ident, FunctionType::parse(input)?))
+                },
+                _ => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(ident, input)?)),
             },
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
@@ -119,16 +130,15 @@ pub struct FunctionType(Vec<Type>);
 
 impl FunctionType {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
-        // example input: a -> b -> c
         let mut types = vec![];
         loop {
             types.push(Type::parse(input)?);
             match next_token(input, true)? {
                 Token::ReservedOperator(op) if op == "->" => {
-                    input.next(); // consume the operator
+                    input.next(); // consume the '->'
                     continue
                 },
-                _ => break,
+                _ => break
             }
         }
         
@@ -167,14 +177,226 @@ pub enum TypeApplicationElement {
 
 #[derive(Debug)]
 pub struct FunctionDeclaration {
-    /*pub name: String,*/
-    /*pub args: Vec<String>,*/
-    /*pub body: Expr,*/
+    // TODO: operator definitions
+    // TODO: where clauses
+    // TODO: guards
+    pub name: String,
+    pub lhs: Vec<FunctionParameterPattern>,
+    pub rhs: Expression,
+    //pub guards: Vec<Guard>,
 }
 
 impl FunctionDeclaration {
-    fn parse(_input: &mut TokenIter) -> Result<Self, String> {
-        unimplemented!("FunctionDeclaration::parse")
+    fn parse(name: String, input: &mut TokenIter) -> Result<Self, String> {
+        let mut lhs = vec![];
+        loop {
+            lhs.push(FunctionParameterPattern::parse(input)?);
+            match next_token(input, true)? {
+                Token::ReservedOperator(op) if op == "=" => {
+                    input.next(); // consume the '='
+                    break
+                },
+                _ => continue,
+            }
+        }
+        
+        Ok(FunctionDeclaration { name, lhs, rhs: Expression::parse(input)? })
+    }
+}
+
+#[derive(Debug)]
+pub enum FunctionParameterPattern {
+    AsPattern(String, Option<Box<FunctionParameterPattern>>),
+    //ConstructorPattern(String),
+    //UnitPattern,
+    //EmptyListPattern,
+    //EmptyTuplePattern(i32),
+    //StringLiteral(String),
+    //IntegerLiteral(i64),
+    //CharLiteral(char),
+    //Wildcard,
+    //ParenthesizedPattern(Box<Pattern>),
+    //TuplePattern(Vec<Pattern>),
+    //ListPattern(Vec<Pattern>),
+    //NegatedIntegerLiteral(i64),
+}
+
+impl FunctionParameterPattern {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        use FunctionParameterPattern::*;
+
+        match next_token(input, false)? {
+            Token::VariableIdent(ident) => {
+                match next_token(input, true)? {
+                    Token::Special('@') => {
+                        input.next(); // consume the '@'
+                        Ok(AsPattern(ident, Some(Box::new(FunctionParameterPattern::parse(input)?))))
+                    },
+                    _ => Ok(AsPattern(ident, None)),
+                }
+            },
+            t => Err(format!("Expected variable identifier, got {:?}", t)),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Pattern {
+    FunctionParameterPattern(FunctionParameterPattern),
+    ConstructorPattern(String, Vec<FunctionParameterPattern>),
+    //InfixConstructorPattern(String, Box<Pattern>, Box<Pattern>),
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    InfixedApplication(Box<LeftHandSideExpression>, String, Box<Expression>),
+    NegatedExpr(Box<Expression>),
+    LeftHandSideExpression(Box<LeftHandSideExpression>),
+}
+
+impl Expression {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        match next_token(input, true)? {
+            Token::VariableSym(sym) if sym == "-" => {
+                input.next(); // consume the '-'
+                Ok(Expression::NegatedExpr(Box::new(Expression::parse(input)?)))
+            },
+            _ => {
+                let lhs = Box::new(LeftHandSideExpression::parse(input)?);
+
+                if input.peek().is_none() {
+                    return Ok(Expression::LeftHandSideExpression(lhs))
+                }
+                
+                let op = match next_token(input, true)? {
+                    Token::VariableSym(op) | Token::ConstructorSym(op) => {
+                        input.next(); // consume the operator
+                        op
+                    },
+                    Token::ReservedOperator(op) if op == ":" => {
+                        input.next(); // consume the operator
+                        op
+                    },
+                    Token::Special('`') => {
+                        input.next(); // consume the '`'
+                        match next_token(input, false)? {
+                            Token::VariableIdent(op) => match next_token(input, false)? {
+                                Token::Special('`') => op,
+                                t => return Err(format!("Expected variable identifier, got {:?}", t)),
+                            },
+                            t => return Err(format!("Expected variable identifier, got {:?}", t)),
+                        }
+                    },
+                    _ => return Ok(Expression::LeftHandSideExpression(lhs)),
+                };
+
+                Ok(Expression::InfixedApplication(lhs, op, Box::new(Expression::parse(input)?)))
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LeftHandSideExpression {
+    FunctionApplication(Vec<FunctionParameterExpression>),
+    //LambdaExpr(Vec<Pattern>, Box<Expression>),
+    //LetExpr(Vec<Declarations>, Box<Expression>), // make a group of function decls and type sigs under
+    //tobdecls
+    //IfExpr(Box<Expression>, Box<Expression>, Box<Expression>),
+    //CaseExpr(Box<Expression>, Vec<CaseAlternative>),
+}
+
+impl LeftHandSideExpression {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        match next_token(input, true)? {
+            Token::ReservedIdent(ident) => match ident.as_str() {
+                "let" => {
+                    input.next(); // consume the 'let'
+                    unimplemented!()
+                },
+                "if" => {
+                    input.next(); // consume the 'if'
+                    unimplemented!()
+                },
+                "case" => {
+                    input.next(); // consume the 'case'
+                    unimplemented!()
+                },
+                _ => Err(format!("Unexpected token: {}", ident)),
+            },
+            Token::ReservedOperator(op) if op == "\\" => {
+                input.next(); // consume the '\\'
+                unimplemented!()
+            },
+            _ => {
+                let mut params = vec![];
+                loop {
+                    params.push(FunctionParameterExpression::parse(input)?);
+                    if input.peek().is_none() {
+                        break
+                    }                    
+                    match next_token(input, true)? {
+                        Token::Special('(')
+                            | Token::Special('[')
+                            | Token::VariableIdent(_)
+                            | Token::String(_)
+                            | Token::Integer(_)
+                            | Token::Char(_) => continue,
+                        _ => break,
+                    }
+                }
+                Ok(LeftHandSideExpression::FunctionApplication(params))
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FunctionParameterExpression {
+    StringLiteral(String),
+    IntegerLiteral(i64),
+    CharLiteral(char),
+    Variable(String),
+    //Constructor(String),
+    //EmptyList,
+    //EmptyTuple(i32),
+    //ParenthesizedExpr(Box<Expression>),
+    //TupleExpr(Vec<Expression>),
+    //ListExpr(Vec<Expression>),
+    //ArithmeticSequence(Box<Expression>, Option<Box<Expression>>, Option<Box<Expression>>),
+    //ListComprehension(Box<Expression>, ...),
+    //LeftSection(String, Box<Expression>),
+    //RightSection(Box<Expression>, String),
+
+}
+
+impl FunctionParameterExpression {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        return match next_token(input, false)? {
+            Token::VariableIdent(ident) => Ok(FunctionParameterExpression::Variable(ident)),
+            Token::Special('(') => {
+                match next_token(input, false)? {
+                    Token::VariableSym(op) => match next_token(input, false)? {
+                        Token::Special(')') => Ok(FunctionParameterExpression::Variable(op)),
+                        t => {
+                            // TODO: right section here
+                            Err(format!("Expected ')', got {:?}", t))
+                        },
+                    },
+                    t => {
+                        // TODO: handle tuple etc. here
+                        Err(format!("Expected variable symbol, got {:?}", t))
+                    },
+                }
+            },
+            Token::Special('[') => {
+                unimplemented!()
+            },
+            Token::String(s) => Ok(FunctionParameterExpression::StringLiteral(s)),
+            Token::Integer(i) => Ok(FunctionParameterExpression::IntegerLiteral(i)),
+            Token::Char(c) => Ok(FunctionParameterExpression::CharLiteral(c)),
+            t => Err(format!("Expected variable identifier, got {:?}", t)),
+        }
     }
 }
 
