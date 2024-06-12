@@ -18,7 +18,7 @@
 
   if lang == "en" [
     = Declaration of honor
-    
+
     In this project, we used generative AI tools, namely #gls("github_copilot") for coding and #gls("claude_ai") for
     paraphrasing. Copilot was employed as an advanced autocomplete feature, but it did not generate a significant
     portion of the project.

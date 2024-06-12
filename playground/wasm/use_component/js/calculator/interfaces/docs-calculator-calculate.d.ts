@@ -3,9 +3,9 @@ export namespace DocsCalculatorCalculate {
 }
 /**
  * # Variants
- * 
+ *
  * ## `"add"`
- * 
+ *
  * ## `"mul"`
  */
 export type Op = 'add' | 'mul';

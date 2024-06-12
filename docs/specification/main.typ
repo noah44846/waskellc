@@ -144,7 +144,7 @@ By achieving these objectives, the project will deliver a well-defined functiona
 
 #figure(
   table(
-    columns: 3, 
+    columns: 3,
     inset: 6pt,
     stroke: none,
     align: left,
@@ -183,7 +183,7 @@ The project will utilize git for version control, allowing for tracking changes 
 
 #align(horizon)[
   @img_gantt shows the Gantt chart representing the project timeline and tasks.
-  
+
   #align(center)[
     #figure(
       image("img/gantt.png"),

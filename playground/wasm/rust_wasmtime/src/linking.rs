@@ -51,13 +51,13 @@ pub fn linking_main() -> Result<()> {
     //println!("res2: {:?}", res2);
 
     //for i in buffer1.iter() {
-        //print!("{}", *i as char);
+    //print!("{}", *i as char);
     //}
 
     //println!();
 
     //for i in buffer2.iter() {
-        //print!("{}", *i as char);
+    //print!("{}", *i as char);
     //}
 
     //println!();

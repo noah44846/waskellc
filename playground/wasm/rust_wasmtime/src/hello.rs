@@ -29,7 +29,9 @@ pub fn hello_main() -> Result<()> {
     // that we're also initializing the store with our custom data here too.
     //
     // Afterwards we use the `linker` to create the instance.
-    let data = Log { integers_logged: Vec::new() };
+    let data = Log {
+        integers_logged: Vec::new(),
+    };
     let mut store = Store::new(&engine, data);
     let instance = linker.instantiate(&mut store, &module)?;
 

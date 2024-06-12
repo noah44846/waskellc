@@ -5,4 +5,3 @@ store = Store()
 out = Root(store)
 
 print(out.f(store))
-

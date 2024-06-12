@@ -27,7 +27,7 @@ function evalExpression(arg0, arg1, arg2) {
       if ((arg0) instanceof Error) {
         console.error(arg0);
       }
-      
+
       throw new TypeError(`"${val0}" is not one of the cases of op`);
     }
   }
@@ -63,7 +63,7 @@ const $init = (async() => {
 await $init;
 const calculate010 = {
   evalExpression: evalExpression,
-  
+
 };
 
 export { calculate010 as calculate, calculate010 as 'docs:calculator/calculate@0.1.0',  }

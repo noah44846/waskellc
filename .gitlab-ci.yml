@@ -1,0 +1,84 @@
+image: python:3.10
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PRE_COMMIT_HOME: "$CI_PROJECT_DIR/.pre-commit-cache"
+
+cache:
+  paths:
+    - .pip-cache/
+    - .pre-commit-cache/
+
+stages:
+  - check
+  - build
+  - release
+
+precommit-job:
+  stage: check
+  before_script:
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    - source $HOME/.cargo/env >> ~/.bashrc
+  script:
+    - pip install pre-commit
+    - pre-commit run --all-files
+
+build-job:
+  stage: build
+  image: rust:latest
+  before_script:
+    - echo $CI_JOB_ID
+    - echo GE_JOB_ID=$CI_JOB_ID >> deploy.env
+    - rustup target add wasm32-wasi
+    - rustup target add x86_64-unknown-linux-gnu
+    #- rustup target add x86_64-apple-darwin
+    #- rustup target add aarch64-apple-darwin
+    #- rustup target add x86_64-pc-windows-msvc
+  script:
+    - cargo build -r --manifest-path=waskellc/Cargo.toml --target-dir=out --target=wasm32-wasi
+    - cargo build -r --manifest-path=waskellc/Cargo.toml --target-dir=out --target=x86_64-unknown-linux-gnu
+    #- cargo build -r --manifest-path=waskellc/Cargo.toml --target-dir=out --target=x86_64-apple-darwin
+    #- cargo build -r --manifest-path=waskellc/Cargo.toml --target-dir=out --target=aarch64-apple-darwin
+    #- cargo build -r --manifest-path=waskellc/Cargo.toml --target-dir=out --target=x86_64-pc-windows-msvc
+  artifacts:
+    paths:
+      - out/wasm32-wasi/release/waskellc.wasm
+      - out/x86_64-unknown-linux-gnu/release/waskellc
+      #- out/x86_64-apple-darwin/release/waskellc
+      #- out/aarch64-apple-darwin/release/waskellc
+      #- out/x86_64-pc-windows-msvc/release/waskellc.exe
+    reports:
+      # To ensure we've access to this file in the next stage
+      dotenv: deploy.env
+    expire_in: never
+
+# docs-job:
+
+release-job:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG # Run this job when a tag is created
+  script:
+    - echo 'running release_job'
+    - echo 'Previous Job ID is printed below'
+    - echo $GE_JOB_ID
+  needs:
+    - job: build-job
+      artifacts: true
+  release:
+    name: "Release Executables $CI_COMMIT_TAG"
+    description: "$CI_COMMIT_TAG"
+    tag_name: "$CI_COMMIT_TAG"
+    assets:
+      links:
+        - name: "Wasm32-wasi Executable"
+          url: "${CI_PROJECT_URL}/-/jobs/${GE_JOB_ID}/artifacts/file/out/wasm32-wasi/release/waskellc.wasm"
+        - name: "Linux x86_64 Executable"
+          url: "${CI_PROJECT_URL}/-/jobs/${GE_JOB_ID}/artifacts/file/out/x86_64-unknown-linux-gnu/release/waskellc"
+        #- name: "MacOS x86_64 Executable"
+          #url: "${CI_PROJECT_URL}/-/jobs/${GE_JOB_ID}/artifacts/file/out/x86_64-apple-darwin/release/waskellc"
+        #- name: "MacOS aarch64 Executable"
+          #url: "${CI_PROJECT_URL}/-/jobs/${GE_JOB_ID}/artifacts/file/out/aarch64-apple-darwin/release/waskellc"
+        #- name: "Windows x86_64 Executable"
+          #url: "${CI_PROJECT_URL}/-/jobs/${GE_JOB_ID}/artifacts/file/out/x86_64-pc-windows-msvc/release/waskellc.exe"

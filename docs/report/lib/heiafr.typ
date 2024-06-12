@@ -135,7 +135,7 @@
           #text(
             size: 16pt,
             weight: "semibold",
-            heading_text(author.firstname + " " + author.lastname)) 
+            heading_text(author.firstname + " " + author.lastname))
         ],
       ),
     )
@@ -165,7 +165,7 @@
     if experts.len() > 0 {
       parbreak()
       grid(
-        
+
         columns: (1fr, 1fr),
         row-gutter: 6pt,
         align(right, heading_text(emph(experts_label) + [: #h(5mm)])),
@@ -182,9 +182,9 @@
     image("img/logo-isc.svg", width: 22mm),
     block(
       heading_text(size: 14pt, location + [, ] + long_date(versions.last().date))
-    ) + 
+    ) +
     block(
-      heading_text([Version ] + versions.last().version), 
+      heading_text([Version ] + versions.last().version),
     ),
     image("img/logo-hesso.svg", width: 35mm),
   )
@@ -221,7 +221,7 @@
   show link: underline
 
   // Add custom syntax highlighting
-  // set raw(syntaxes: "syntaxes/SWI-Prolog.sublime-syntax") 
+  // set raw(syntaxes: "syntaxes/SWI-Prolog.sublime-syntax")
 
   doc
 
@@ -240,7 +240,7 @@
       let (short, ..other) = dict.at(key)
       res.push((key: key, short: short, ..other))
     }
-    res  
+    res
   }
   print-glossary(parse_glossary())
 

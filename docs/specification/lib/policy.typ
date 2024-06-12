@@ -16,7 +16,7 @@
 
   if lang == "en" [
     = Declaration of honor
-    
+
     In this project, we used generative AI tools, namely Github Copilot @github_copilot for coding and Claude AI @claude_ai for paraphrasing. Copilot was employed as an advanced autocomplete feature, but it
     did not generate a significant portion of the project. Writefull, on the other hand, was
     utilised to enhance the clarity of this document by employing its paraphrasing and grammar checking capabilities.

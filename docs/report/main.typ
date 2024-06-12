@@ -56,7 +56,7 @@
 
 //#figure(
   //table(
-    //columns: 3, 
+    //columns: 3,
     //inset: 6pt,
     //stroke: none,
     //align: left,
@@ -196,4 +196,3 @@ This section describes the design of the functional language, compiler, and stan
 == Future work
 
 == Personal opinion
-

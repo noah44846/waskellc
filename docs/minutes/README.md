@@ -7,4 +7,3 @@ This script converts markdown files to PDF files. It uses the [pandoc](https://p
 ```bash
 pandoc 20240529-minutes.md -o 20240529-minutes.pdf
 ```
-

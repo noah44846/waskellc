@@ -43,7 +43,7 @@ pub fn create_closure(fn_index: u32, val: u32) -> *mut u8 {
 #[no_mangle]
 pub fn test_write() -> *mut u8 {
     let ptr = alloc(10);
-    
+
     // Do something with ptr
     unsafe {
         let buf = std::slice::from_raw_parts_mut(ptr, 10);

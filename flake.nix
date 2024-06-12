@@ -21,12 +21,13 @@
             mermaid-cli
             pandoc
             texliveTeTeX
+            pre-commit
 
             cargo-wasi
             cargo-component
 
             openssl
-            
+
             wasmtime
             wasm-tools
 
@@ -45,7 +46,11 @@
                     name = "Noah Godel"
               ''
           ;
-        }; 
+
+          shellHook = ''
+            export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin
+          '';
+        };
       }
     );
 }

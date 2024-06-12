@@ -12,7 +12,7 @@ def _load(ty: Any, mem: wasmtime.Memory, store: wasmtime.Storelike, base: int, o
                             ty.from_address(ctypes.addressof(raw_base.contents) + ptr)
                         )
                         return c_ptr[0]
-                
+
 
 def _decode_utf8(mem: wasmtime.Memory, store: wasmtime.Storelike, ptr: int, len: int) -> str:
                         ptr = ptr & 0xffffffff
@@ -24,4 +24,3 @@ def _decode_utf8(mem: wasmtime.Memory, store: wasmtime.Storelike, ptr: int, len:
                             ctypes.c_ubyte.from_address(ctypes.addressof(base.contents) + ptr)
                         )
                         return ctypes.string_at(base, len).decode('utf-8')
-                

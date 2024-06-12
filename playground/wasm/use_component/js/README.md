@@ -6,5 +6,5 @@ Take the Wasm component from `../../build_component/direct/hello-world/out/hello
 npm i
 npx jco transpile hello-world.wasm -o hello-world
 # or
-npx jco transpile calculator.wasm -o calculator 
+npx jco transpile calculator.wasm -o calculator
 ```

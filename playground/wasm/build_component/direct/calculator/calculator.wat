@@ -21,7 +21,7 @@
             call $mul
             return
         end
-        
+
         unreachable
     )
 )
