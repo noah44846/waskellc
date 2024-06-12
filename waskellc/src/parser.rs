@@ -21,7 +21,8 @@ pub enum Token {
     ReservedOperator(String),
 
     // any string of symbol characters (punctuation, math, etc.) that does not start with a colon
-    #[regex(r#"[\pS\pP--[_"'\(),;\[\]`\{}:]][\pS\pP--[_"'\(),;\[\]`\{}]]*"#, |lex| lex.slice().to_owned(), priority = 50)]
+    #[regex(r#"[\pS\pP--[_"'\(),;\[\]`\{}:]][\pS\pP--[_"'\(),;\[\]`\{}]]*"#,
+            |lex| lex.slice().to_owned(), priority = 50)]
     VariableSym(String),
 
     // any string that starts with a colon and is followed by any symbol character (punctuation, math, etc.)
@@ -33,14 +34,13 @@ pub enum Token {
 
     #[regex(r"\d+", |lex| lex.slice().parse::<i64>().unwrap())]
     Integer(i64),
-    
+
     // TODO: floating point numbers
     // TODO: escape sequences
     // TODO: layout rule
-
     #[regex(r#"'.*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
     Char(char),
-    
+
     #[regex(r#""[^"]*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_owned())]
     String(String),
 }
@@ -74,10 +74,10 @@ impl TopDeclarations {
         loop {
             top_declarations.push(TopDeclaration::parse(input)?);
             if input.peek().is_none() {
-                break
+                break;
             }
         }
-        
+
         Ok(TopDeclarations(top_declarations))
     }
 }
@@ -97,27 +97,27 @@ impl TopDeclaration {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let token = next_token(input, false)?;
         match token {
-            Token::ReservedIdent(ident) => {
-                match ident.as_str() {
-                    "type" => {
-                        unimplemented!()
-                    },
-                    "data" => {
-                        unimplemented!()
-                    },
-                    "newtype" => {
-                        unimplemented!()
-                    },
-                    _ => Err(format!("Unexpected token: {}", ident)),
+            Token::ReservedIdent(ident) => match ident.as_str() {
+                "type" => {
+                    unimplemented!()
                 }
+                "data" => {
+                    unimplemented!()
+                }
+                "newtype" => {
+                    unimplemented!()
+                }
+                _ => Err(format!("Unexpected token: {}", ident)),
             },
             // TODO: support (&*) as variables
             Token::VariableIdent(ident) => match next_token(input, true)? {
                 Token::ReservedOperator(op) if op == "::" => {
                     input.next(); // consume the '::'
                     Ok(TopDeclaration::TypeSig(ident, FunctionType::parse(input)?))
-                },
-                _ => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(ident, input)?)),
+                }
+                _ => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(
+                    ident, input,
+                )?)),
             },
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
@@ -136,12 +136,12 @@ impl FunctionType {
             match next_token(input, true)? {
                 Token::ReservedOperator(op) if op == "->" => {
                     input.next(); // consume the '->'
-                    continue
-                },
-                _ => break
+                    continue;
+                }
+                _ => break,
             }
         }
-        
+
         Ok(FunctionType(types))
     }
 }
@@ -156,7 +156,7 @@ impl Type {
             Token::ConstructorIdent(ident) => {
                 let elements = vec![TypeApplicationElement::TypeConstructor(ident)];
                 Ok(Type(elements))
-            },
+            }
             t => Err(format!("Expected type constructor, got {:?}", t)),
         }
     }
@@ -194,13 +194,17 @@ impl FunctionDeclaration {
             match next_token(input, true)? {
                 Token::ReservedOperator(op) if op == "=" => {
                     input.next(); // consume the '='
-                    break
-                },
+                    break;
+                }
                 _ => continue,
             }
         }
-        
-        Ok(FunctionDeclaration { name, lhs, rhs: Expression::parse(input)? })
+
+        Ok(FunctionDeclaration {
+            name,
+            lhs,
+            rhs: Expression::parse(input)?,
+        })
     }
 }
 
@@ -230,11 +234,14 @@ impl FunctionParameterPattern {
                 match next_token(input, true)? {
                     Token::Special('@') => {
                         input.next(); // consume the '@'
-                        Ok(AsPattern(ident, Some(Box::new(FunctionParameterPattern::parse(input)?))))
-                    },
+                        Ok(AsPattern(
+                            ident,
+                            Some(Box::new(FunctionParameterPattern::parse(input)?)),
+                        ))
+                    }
                     _ => Ok(AsPattern(ident, None)),
                 }
-            },
+            }
             t => Err(format!("Expected variable identifier, got {:?}", t)),
         }
     }
@@ -260,38 +267,47 @@ impl Expression {
             Token::VariableSym(sym) if sym == "-" => {
                 input.next(); // consume the '-'
                 Ok(Expression::NegatedExpr(Box::new(Expression::parse(input)?)))
-            },
+            }
             _ => {
                 let lhs = Box::new(LeftHandSideExpression::parse(input)?);
 
                 if input.peek().is_none() {
-                    return Ok(Expression::LeftHandSideExpression(lhs))
+                    return Ok(Expression::LeftHandSideExpression(lhs));
                 }
-                
+
                 let op = match next_token(input, true)? {
                     Token::VariableSym(op) | Token::ConstructorSym(op) => {
                         input.next(); // consume the operator
                         op
-                    },
+                    }
                     Token::ReservedOperator(op) if op == ":" => {
                         input.next(); // consume the operator
                         op
-                    },
+                    }
                     Token::Special('`') => {
                         input.next(); // consume the '`'
                         match next_token(input, false)? {
                             Token::VariableIdent(op) => match next_token(input, false)? {
                                 Token::Special('`') => op,
-                                t => return Err(format!("Expected variable identifier, got {:?}", t)),
+                                t => {
+                                    return Err(format!(
+                                        "Expected variable identifier, got {:?}",
+                                        t
+                                    ))
+                                }
                             },
                             t => return Err(format!("Expected variable identifier, got {:?}", t)),
                         }
-                    },
+                    }
                     _ => return Ok(Expression::LeftHandSideExpression(lhs)),
                 };
 
-                Ok(Expression::InfixedApplication(lhs, op, Box::new(Expression::parse(input)?)))
-            },
+                Ok(Expression::InfixedApplication(
+                    lhs,
+                    op,
+                    Box::new(Expression::parse(input)?),
+                ))
+            }
         }
     }
 }
@@ -313,40 +329,40 @@ impl LeftHandSideExpression {
                 "let" => {
                     input.next(); // consume the 'let'
                     unimplemented!()
-                },
+                }
                 "if" => {
                     input.next(); // consume the 'if'
                     unimplemented!()
-                },
+                }
                 "case" => {
                     input.next(); // consume the 'case'
                     unimplemented!()
-                },
+                }
                 _ => Err(format!("Unexpected token: {}", ident)),
             },
             Token::ReservedOperator(op) if op == "\\" => {
                 input.next(); // consume the '\\'
                 unimplemented!()
-            },
+            }
             _ => {
                 let mut params = vec![];
                 loop {
                     params.push(FunctionParameterExpression::parse(input)?);
                     if input.peek().is_none() {
-                        break
-                    }                    
+                        break;
+                    }
                     match next_token(input, true)? {
                         Token::Special('(')
-                            | Token::Special('[')
-                            | Token::VariableIdent(_)
-                            | Token::String(_)
-                            | Token::Integer(_)
-                            | Token::Char(_) => continue,
+                        | Token::Special('[')
+                        | Token::VariableIdent(_)
+                        | Token::String(_)
+                        | Token::Integer(_)
+                        | Token::Char(_) => continue,
                         _ => break,
                     }
                 }
                 Ok(LeftHandSideExpression::FunctionApplication(params))
-            },
+            }
         }
     }
 }
@@ -367,12 +383,11 @@ pub enum FunctionParameterExpression {
     //ListComprehension(Box<Expression>, ...),
     //LeftSection(String, Box<Expression>),
     //RightSection(Box<Expression>, String),
-
 }
 
 impl FunctionParameterExpression {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
-        return match next_token(input, false)? {
+        match next_token(input, false)? {
             Token::VariableIdent(ident) => Ok(FunctionParameterExpression::Variable(ident)),
             Token::Special('(') => {
                 match next_token(input, false)? {
@@ -381,17 +396,17 @@ impl FunctionParameterExpression {
                         t => {
                             // TODO: right section here
                             Err(format!("Expected ')', got {:?}", t))
-                        },
+                        }
                     },
                     t => {
                         // TODO: handle tuple etc. here
                         Err(format!("Expected variable symbol, got {:?}", t))
-                    },
+                    }
                 }
-            },
+            }
             Token::Special('[') => {
                 unimplemented!()
-            },
+            }
             Token::String(s) => Ok(FunctionParameterExpression::StringLiteral(s)),
             Token::Integer(i) => Ok(FunctionParameterExpression::IntegerLiteral(i)),
             Token::Char(c) => Ok(FunctionParameterExpression::CharLiteral(c)),
@@ -400,8 +415,8 @@ impl FunctionParameterExpression {
     }
 }
 
-pub fn parse(input: String) {
-    let mut tokens = Token::lexer(input.as_str()).peekable();
+pub fn parse(input: &str) {
+    let mut tokens = Token::lexer(input).peekable();
 
     let top_declarations = TopDeclarations::parse(&mut tokens);
 
