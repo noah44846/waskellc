@@ -6,13 +6,15 @@
     (import "1" "create_closure" (func $create_closure (param i32 i32) (result i32)))
     (table 2 funcref)
     (elem (i32.const 0) $n_main $main1)
-    (type $t0 (func (param i32)))
+    (type $t0 (func (param i32) (result i32)))
+    (type $t1 (func (result i32)))
+    (type $t2 (func))
 
-    (func $main1 (param i32)
+    (func $main1
         call $main
     )
 
-    (func $n_main (export "n_main") (param i32)
+    (func $n_main (export "n_main") (param i32) (result i32)
         (loop $n_main
             local.get 0
             i32.const 0
@@ -27,9 +29,10 @@
             local.set 0
             br $n_main
         )
+        i32.const 0
     )
 
-    (func $use_closure (export "use_closure")
+    (func $use_closure (export "use_closure") (result i32)
         call $use_closure1
         call $use_closure2
     )
@@ -40,11 +43,13 @@
         call $create_closure
     )
 
-    (func $use_closure2 (export "use_closure2") (param i32)
+    (func $use_closure2 (export "use_closure2") (param i32) (result i32)
         local.get 0
         i32.load offset=4
         i32.load
-        (call_indirect (type $t0) (i32.load (local.get 0)))
+        local.get 0
+        i32.load
+        call_indirect 0 (type $t2)
     )
 
     (func $write (export "write") (result i32 i32) (local i32)

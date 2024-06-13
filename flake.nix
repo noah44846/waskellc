@@ -29,6 +29,7 @@
             openssl
 
             wasmtime
+            wasmer
             wasm-tools
 
             nodejs_20

@@ -32,9 +32,39 @@ group = "Wasm runtimes"
 
 [wasmer]
 short = "Wasmer"
-desc = "Wasmer is a standalone WebAssembly runtime that can be used to run WebAssembly code outside of a web browser."
+desc = "Wasmer is a standalone WebAssembly runtime that can be used to run WebAssembly code outside of a web browser and deploy it on the edge."
 group = "Wasm runtimes"
+
+[wasmedge]
+short = "WasmEdge"
+desc = "WasmEdge is a standalone WebAssembly runtime that can be used to run WebAssembly code outside of a web browser and deploy it on the edge."
+
+[ocaml]
+short = "OCaml"
+desc = "OCaml is a general-purpose programming language with an emphasis on expressiveness and safety. It is a functional language that is used in a variety of applications, from compilers to web servers."
+
+[fsharp]
+short = "F#"
+desc = "F# is a functional programming language that is used in a variety of applications, from compilers to web servers. It is known for its strong type system and expressive syntax."
+
+[lisp]
+short = "Lisp"
+desc = "Lisp is a family of programming languages that are known for their simple syntax and powerful metaprogramming capabilities. Common Lisp and Scheme are two of the most popular dialects of Lisp."
+
+[common_lisp]
+short = "Common Lisp"
+desc = "Common Lisp is a dialect of the Lisp programming language that is known for its expressive syntax and powerful metaprogramming capabilities."
+group = "Lisp dialects"
+
+[clojure]
+short = "Clojure"
+desc = "Clojure is a dialect of the Lisp programming language that is designed for concurrent programming and functional programming. It is known for its expressive syntax and powerful metaprogramming capabilities."
+group = "Lisp dialects"
 
 [beam]
 short = "BEAM"
 desc = "BEAM is the virtual machine at the core of the Erlang Open Telecom Platform (OTP). It is a process virtual machine that is responsible for executing Erlang and Elixir code."
+
+[haskell]
+short = "Haskell"
+desc = "Haskell is a functional programming language that is used in a variety of applications, from compilers to web servers. It is known for its strong type system and expressive syntax."

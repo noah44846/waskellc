@@ -221,7 +221,7 @@
   show link: underline
 
   // Add custom syntax highlighting
-  // set raw(syntaxes: "syntaxes/SWI-Prolog.sublime-syntax")
+  set raw(syntaxes: "syntaxes/wast/wast.sublime-syntax")
 
   doc
 

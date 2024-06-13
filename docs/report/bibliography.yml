@@ -8,9 +8,42 @@ spec_doc:
   language: English
   note: This document is in the appendix
 
-#word_puzzle_clp_code:
-  #type: Web
-  #title: Word puzzle CLP program provided as an example for the GNU Prolog CLP library
-  #author: Daniel Diaz
-  #url: https://github.com/maandree/gprolog/blob/master/examples/ExamplesFD/alpha.pl
-  #date: 2009
+ocaml_wasm:
+  type: Web
+  title: News about OCaml and WebAssembly
+  author: Jan Midtgaard
+  url: https://discuss.ocaml.org/t/a-may-update-on-wasm-of-ocaml/14635
+  date: 2024
+
+wasm_features:
+  type: Web
+  title: WebAssembly feature extensions
+  author: WebAssembly Community Group
+  url: https://webassembly.org/features/
+  date: 2024
+
+wasm_component_model:
+  type: Web
+  title: WebAssembly Component Model
+  author: Bytecode Alliance
+  url: https://component-model.bytecodealliance.org/
+  date: 2024
+
+wasm_gc:
+  type: Web
+  title: WebAssembly Garbage Collection
+  author: WebAssembly Community Group
+  url: https://github.com/WebAssembly/gc
+  date: 2024
+
+wasm_ref_types:
+  type: Web
+  title: WebAssembly Reference Types
+  author: WebAssembly Community Group
+  url: https://github.com/WebAssembly/reference-types
+
+wasm_func_refs:
+  type: Web
+  title: WebAssembly Function References
+  author: WebAssembly Community Group
+  url: https://github.com/WebAssembly/function-references

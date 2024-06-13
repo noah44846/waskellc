@@ -11,11 +11,13 @@ use wasmtime::*;
 //mod memory;
 //mod hello;
 //mod wasi;
-mod linking;
+//mod linking;
+mod ref_types;
 
 fn main() -> Result<()> {
     //memory::memory_main()
     //hello::hello_main()
     //wasi::wasi_main()
-    linking::linking_main()
+    //linking::linking_main()
+    ref_types::ref_types_main()
 }
