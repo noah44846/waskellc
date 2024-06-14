@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // ---------------------------------------------------------------------------
 // Author : Noah Godel <noah.godel@edu.hefr.ch>
-// Date   : 10 March 2024
+// Date   : 31 May 2024
 // ---------------------------------------------------------------------------
 // Example of a student reports at the Haute école d'ingénierie et
 // d'architecture de Fribourg
@@ -20,8 +20,13 @@
 #let versions = (
   (
     version: "0.1",
-    date: datetime(year: 2024, month: 05, day: 31),
-    changes: [First version],
+    date: datetime(year: 2024, month: 06, day: 12),
+    changes: [First version - introduction and chapter titles],
+  ),
+  (
+    version: "0.2",
+    date: datetime(year: 2024, month: 06, day: 19),
+    changes: [Analysis section],
   ),
 )
 
@@ -48,11 +53,6 @@
   theme_color: rgb(0,124,183,255),
   doc,
 )
-
-//#figure(
-  //image("img/embedding.png", width: 60%),
-  //caption: [Illustration of embedding a Wasm module into a codebase.],
-//) <img_embedding>
 
 //#figure(
   //table(
@@ -87,6 +87,13 @@ The functional programming paradigm offers advantages for certain types of probl
 #gls("wasm") is a bytecode format designed to execute code at near-native speeds across different environments like web browsers and #glspl("wasm_runtime"). By developing a compiler for a functional language, or in the context of this project, a subset of an existing one, that compiles to #glss("wasm"), we can combine functional programming benefits with #glss("wasm")'s performance and portability. This enables seamless integration of high-performance functional code into codebases of different languages, allowing developers to utilize functional programming strengths for specific components.
 
 The project aims to demonstrate embedding the new functional language compiled to #glss("wasm") into existing codebases, showcasing interoperability and the potential for combining paradigms within the same project. For more details on the context, refer to the requirements specification document @spec_doc.
+
+@img_embedding illustrates the concept of embedding a #glss("wasm") module into a codebase.
+
+#figure(
+  image("img/embedding.png", width: 60%),
+  caption: [Illustration of embedding a Wasm module into a codebase.],
+) <img_embedding>
 
 == Objectives
 
@@ -170,8 +177,9 @@ Clojure is a modern Lisp dialect that runs on the Java Virtual Machine (JVM) and
 Advantages:
 - Functional programming paradigm aligned with the project's goals.
 - Runs on the JVM, which has existing tooling and libraries for Wasm compilation.
+
 Disadvantages:
-- No direct support for #glss("wasm") compilation, which means there is no reference implementation for the project.
+- No _direct_ support for #glss("wasm") compilation, which means there is no reference implementation for the project.
 - The author has limited experience with Clojure and defining a subset may be challenging.
 
 === The BEAM languages (Erlang, Elixir)
@@ -185,6 +193,7 @@ Erlang is a general-purpose, concurrent programming language with built-in suppo
 Advantages:
 - Functional programming paradigm aligned with the project's goals.
 - There are alternative compilers for BEAM languages that target #glss("wasm"), which can serve as a reference for the project.
+
 Disadvantages:
 - The author has limited experience with Erlang, which may complicate the task of defining a subset.
 
@@ -196,6 +205,7 @@ Advantages:
 - Functional programming paradigm aligned with the project's goals.
 - Elixir has a more modern syntax and tooling compared to Erlang.
 - As with Erlang, there are alternative compilers for BEAM languages that target #glss("wasm"), which can serve as a reference for the project.
+
 Disadvantages:
 - The author has limited experience with Elixir, which may complicate the task of defining a subset.
 
@@ -213,7 +223,7 @@ Advantages:
 
 Disadvantages:
 - Lazy evaluation may introduce complexities in the compilation process and performance considerations.
-- Limited adoption in industry compared to more mainstream languages, potentially impacting future community support and ecosystem growth.
+- Haskell's advanced type system may require additional effort to define a subset that is both expressive and manageable within the project's timeframe.
 
 Considering the project's goals of creating a functional language subset tailored for efficient compilation to WebAssembly (Wasm), Haskell stands out as the most suitable choice. Its purely functional nature, advanced type system, existing tooling for Wasm compilation, and the author's familiarity with the language make it an ideal foundation for this project. Since the project has a limited timeframe of 7 weeks, the choice of a language subset that the author is most comfortable with, is crucial.
 
@@ -229,9 +239,9 @@ In its current form, Wasm provides a set of core features that are sufficient fo
 
 === Component model
 
-One of the main limitations of Wasm (especially in the context of embedding it into existing codebases) is the small number of types it supports. The component model proposal @wasm_component_model aims to address this limitation by introducing a new language that allows developers to define custom types and interfaces and an ABI for interacting with Wasm modules. This extension could be beneficial for the project as it would enable more seamless integration of the functional language subset into other codebases.
+One of the main limitations of Wasm (especially in the context of embedding it into existing codebases) is the small number of types it supports (essentially integers and floats). The component model proposal @wasm_component_model aims to address this limitation by introducing a new language that allows developers to define custom types and interfaces and an ABI for interacting with Wasm modules. This extension could be beneficial for the project as it would enable more seamless integration of the functional language subset into other codebases.
 
-Using this new language, developers can define interfaces using the .wit file format and implement these interfaces in Wasm modules. To use the generated component, bindings need to be created in the host codebase that match the interface defined in the .wit file. This allows the host codebase to interact with the Wasm module using the defined interface.
+Using this new language, developers can define interfaces using the .wit file format and implement these interfaces in Wasm modules. To use the generated component, bindings need to be generated in the host codebase that match the interface, its types and functions that are defined in the .wit file. This allows the host codebase to interact with the Wasm component using the defined interface.
 
 The problem with this extension is that it is still in the proposal stage and Wasm components can only be run in a few languages (Rust, JavaScript and partially Python) using the Wasmtime runtime. This could limit the project's ability to demonstrate embedding the functional language into different codebases.
 
@@ -263,9 +273,9 @@ The problem with this extension is that it is still in the proposal stage and Wa
 
 === Reference types and function references
 
-The reference types proposal @wasm_ref_types aims to allow for reference types (function references or external references) to be used as values. This extension could be beneficial for the project as it would allow the functional language subset to interact more easily with the host codebase. Additionally since Haskell is a functional language, this extension simplifies the implementation of functions as first-class citizens.
+The reference types proposal @wasm_ref_types aims to allow for reference types (function references or external references) to be used as values. This extension could be beneficial for the project since this extension simplifies the implementation of functions as first-class citizens.
 
-In core Wasm, function references are only used inside function tables (necessary for indirect calls). The reference types proposal extends this to allow function references to be used as values. It introduces new instructions to interact with the function tables to dynamically add and remove functions.
+In core Wasm, function references are only used inside function tables (necessary for indirect calls). The reference types proposal extends this to allow function references to be used as values in the functions themselves and not only as indices into the function table. It also introduces new instructions to interact with the function table to dynamically add and remove functions from it.
 
 The proposal is still in the proposal stage, but it is supported by the Wasmer, Wasmtime and WasmEdge runtimes and practically everywhere else. This means that the project could leverage these runtimes to demonstrate the embedding of the functional language into different codebases.
 
@@ -287,16 +297,13 @@ The function references proposal is still in the proposal stage and is less supp
       ;; This function calls the function referenced in the table with
       ;; the index returned by "add_func_to_tabel"
       (func $ref_types_example (result i32)
-          call $add_func_to_tabel
-          call_indirect 0 (type $type0)
+          (call_indirect 0 (type $type0) (call $add_func_to_tabel))
       )
 
       ;; This function adds the function reference to the table and
       ;; returns the index
       (func $add_func_to_tabel (result i32)
-          i32.const 0
-          ref.func $foo
-          table.set 0
+          (table.set 0 (ref.func $foo) (i32.const 0))
           i32.const 0
       )
 
@@ -306,17 +313,13 @@ The function references proposal is still in the proposal stage and is less supp
       ;; This function takes a int and calls "call_passed_func" with
       ;; it and the function reference
       (func $func_types_example (param i32) (result i32)
-          local.get 0
-          ref.func $bar
-          call $call_passed_func
+          (call $call_passed_func (local.get 0) (ref.func $bar))
       )
 
       ;; This function takes a int and a function reference and calls
       ;; the function reference with the int
       (func $call_passed_func (param i32) (param (ref $t1)) (result i32)
-          local.get 0
-          local.get 1
-          call_ref $type1
+          (call_ref $type1 (local.get 0) (local.get 1))
       )
   )
   ```],
@@ -325,9 +328,70 @@ The function references proposal is still in the proposal stage and is less supp
 
 === Garbage collection
 
-The garbage collection proposal @wasm_gc
+The garbage collection proposal @wasm_gc aims to introduce garbage collection support in Wasm. This extension could be beneficial for the project as it would simplify memory management and resource cleanup in the functional language subset. It is a quite complex proposal and is still in the proposal stage. Since the support for garbage collection in Wasm is as of now limited to the browser and node.js, this could limit the project's ability to demonstrate embedding the functional language into different codebases.
+
+The proposal bases itself on the reference types and function references proposals and introduces new types (so-called heap types) like structs, arrays, and references to these types. It also introduces new instructions to allocate and modify these types on the heap.
 
 === Tail call optimization
+
+The tail call optimization proposal @wasm_tail_call aims to introduce tail call optimization support in Wasm. This extension could be beneficial for the project as it would optimize the performance of recursive functions in the functional language subset. The proposal is still in the proposal stage and is supported by the Wasmtime and WasmEdge runtimes and practically everywhere else.
+
+@lst_tail_call shows an example of tail call optimization in Wasm.
+
+#figure(
+  code_block[```wast
+  (module
+      (func $factorial (param $x i64) (result i64)
+          (return (call $factorial_aux (local.get $x) (i64.const 1)))
+      )
+
+      (func $factorial_aux (param $x i64) (param $acc i64) (result i64)
+          (if (i64.eqz (local.get $x))
+              (then (return (local.get $acc)))
+              (else
+                  (return
+                      (call $factorial_aux
+                          (i64.sub (local.get $x) (i64.const 1))
+                          (i64.mul (local.get $x) (local.get $acc))
+                      )
+                  )
+              )
+          )
+          unreachable
+      )
+
+      (func $factorial_tail (param $x i64) (result i64)
+          (return_call $factorial_tail_aux (local.get $x) (i64.const 1))
+      )
+
+      (func $factorial_tail_aux (param $x i64) (param $acc i64) (result i64)
+          (if (i64.eqz (local.get $x))
+              (then (return (local.get $acc)))
+              (else
+                  (return_call $factorial_tail_aux
+                      (i64.sub (local.get $x) (i64.const 1))
+                      (i64.mul (local.get $x) (local.get $acc))
+                  )
+              )
+          )
+          unreachable
+      )
+      (export "factorial" (func $factorial))
+      (export "factorial_tail" (func $factorial_tail))
+  )
+  ```],
+  caption: [Example of tail call optimization in Wasm.],
+) <lst_tail_call>
+
+@lst_tail_call_performance shows a performance comparison between a factorial function with and without tail call optimization.
+
+#figure(
+  code_block[```
+  factorial(20): 2432902008176640000 in 12.41µs
+  factorial_tail(20): 2432902008176640000 in 1.319µs
+  ```],
+  caption: [Example of tail call optimization performance comparison.],
+) <lst_tail_call_performance>
 
 == Embedding the Wasm module into a codebase
 

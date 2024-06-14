@@ -24,26 +24,33 @@ wasm_features:
 
 wasm_component_model:
   type: Web
-  title: WebAssembly Component Model
+  title: WebAssembly Component Model proposal
   author: Bytecode Alliance
-  url: https://component-model.bytecodealliance.org/
-  date: 2024
-
-wasm_gc:
-  type: Web
-  title: WebAssembly Garbage Collection
-  author: WebAssembly Community Group
-  url: https://github.com/WebAssembly/gc
+  url: https://component-model.bytecodealliance.org
   date: 2024
 
 wasm_ref_types:
   type: Web
-  title: WebAssembly Reference Types
+  title: WebAssembly Reference Types proposal
   author: WebAssembly Community Group
   url: https://github.com/WebAssembly/reference-types
 
 wasm_func_refs:
   type: Web
-  title: WebAssembly Function References
+  title: WebAssembly Function References proposal
   author: WebAssembly Community Group
   url: https://github.com/WebAssembly/function-references
+
+wasm_gc:
+  type: Web
+  title: WebAssembly Garbage Collection proposal
+  author: WebAssembly Community Group
+  url: https://github.com/WebAssembly/gc
+  date: 2024
+
+wasm_tail_call:
+  type: Web
+  title: WebAssembly Tail Call proposal
+  author: WebAssembly Community Group
+  url: https://github.com/WebAssembly/tail-call
+  date: 2024
