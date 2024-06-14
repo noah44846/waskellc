@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: MIT
+
+//! Parser module contains the parser and lexer for the Waskell programming language.
+
 use logos::{Lexer, Logos};
 
 use std::iter::Peekable;
 
+/// A lexer for the Waskell programming language.
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"\s+")]
 pub enum Token {
@@ -13,6 +18,7 @@ pub enum Token {
     #[regex(r"[[:upper:]][[[:word:]]']*", |lex| lex.slice().to_owned())]
     ConstructorIdent(String),
 
+    /// Reserved identifiers
     #[regex(r"case|class|data|default|deriving|do|else|foreign|if|import|in|infix|infixl|infixr|instance|let|module|
             newtype|of|then|type|where|_", |lex| lex.slice().to_owned(), priority = 100)]
     ReservedIdent(String),
@@ -25,6 +31,7 @@ pub enum Token {
             |lex| lex.slice().to_owned(), priority = 50)]
     VariableSym(String),
 
+    /// Constructor symbols
     // any string that starts with a colon and is followed by any symbol character (punctuation, math, etc.)
     #[regex(r#":[\pS\pP--[_"'\(),;\[\]`\{}]]*"#, |lex| lex.slice().to_owned(), priority = 50)]
     ConstructorSym(String),
