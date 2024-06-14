@@ -54,3 +54,52 @@ wasm_tail_call:
   author: WebAssembly Community Group
   url: https://github.com/WebAssembly/tail-call
   date: 2024
+
+wasmer_sdks:
+  type: Web
+  title: List of SDKs for the Wasmer runtime
+  author: Wasmer
+  url: https://github.com/wasmerio/wasmer?tab=readme-ov-file#wasmer-sdk
+  date: 2024
+
+wasmtime_sdks:
+  type: Web
+  title: List of SDKs for the Wasmtime runtime
+  author: Wasmtime
+  url: https://github.com/wasmerio/wasmer?tab=readme-ov-file#wasmer-sdk
+  date: 2024
+
+wasmedge_sdks:
+  type: Web
+  title: List of SDKs for the Wasmedge runtime
+  author: WasmEdge
+  url: https://wasmedge.org/docs/embed/overview
+  date: 2024
+
+wasmedge_proposals:
+  type: Web
+  title: List of supported Wasm proposals for the Wasmedge runtime
+  author: WasmEdge
+  url: https://wasmedge.org/docs/start/wasmedge/extensions/proposals/#standard-webassembly-features
+  date: 2024
+
+haskell_spec:
+  type: Web
+  title: Haskell language specification
+  author: Simon Marlow
+  url: https://www.haskell.org/onlinereport/haskell2010/
+  date: 2010
+
+haskell_prelude:
+  type: Web
+  title: Haskell Prelude documentation
+  author: The Haskell community
+  url: https://hackage.haskell.org/package/base-4.7.0.1/docs/Prelude.html
+  date: 2024
+
+ghc_compiler:
+  type: Web
+  title: Lecture notes on the GHC compiler
+  author: Brian O'Sullivan
+  url: https://www.scs.stanford.edu/11au-cs240h/notes/ghc.html
+  date: 2012

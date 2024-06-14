@@ -30,6 +30,7 @@
 
             wasmtime
             wasmer
+            wasmedge
             wasm-tools
 
             nodejs_20
@@ -50,6 +51,7 @@
 
           shellHook = ''
             export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin
+            echo ${nixpkgs}
           '';
         };
       }

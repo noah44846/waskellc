@@ -13,6 +13,7 @@
 #import "@preview/glossarium:0.4.1": gls, glspl
 #import "@preview/big-todo:0.2.0": *
 #import "@preview/cetz:0.2.2": canvas, plot
+#import "@preview/simplebnf:0.1.0": *
 
 #set text(region: "ch", lang: "en")
 
@@ -53,23 +54,6 @@
   theme_color: rgb(0,124,183,255),
   doc,
 )
-
-//#figure(
-  //table(
-    //columns: 3,
-    //inset: 6pt,
-    //stroke: none,
-    //align: left,
-    //table.header([*Week*], [*Description*], [*Deliverables*]),
-    //table.hline(stroke: 1pt),
-    //table.vline(stroke: 1pt, x: 1),
-    //table.vline(stroke: 1pt, x: 2),
-    //[Week 1], [Write the requirements specification document and start the project report.], [The requirements specification document.],
-    //table.hline(stroke: 0.5pt),
-    //[Week 2], [Define the language specification, design the standard library and research code generation strategies.], [The chapters in the project report detailing the language specification, standard library design, and code generation strategy.],
-  //),
-  //caption: [Project timeline and tasks.],
-//) <tbl_timeline>
 
 #todo_outline
 
@@ -395,63 +379,455 @@ The tail call optimization proposal @wasm_tail_call aims to introduce tail call 
 
 == Embedding the Wasm module into a codebase
 
-The embedding of the #glss("wasm") module into a codebase is a crucial aspect of the project. The #glss("wasm") module should be able to interact with the host codebase seamlessly. The following technologies were considered for the project.
+The embedding of the Wasm module into a codebase is a crucial aspect of the project. The Wasm module should be able to interact with the host codebase seamlessly.
 
-#todo("add embedding technologies (specify the Wasm compatibility, the functional features, the standard library), interface types ??? => (https://docs.wasmer.io/wai)")
+Since Wasm is originally designed to run in web browsers, the embedding of Wasm modules into web applications is well supported. However, embedding Wasm modules into other codebases, such as server-side applications or desktop applications, can be more challenging. To be able to interact with the Wasm module, the host codebase needs a runtime that can load and execute the Wasm module (see @img_embedding). The runtime should also provide mechanisms for passing data between the host codebase and the Wasm module.
+
+The following technologies were considered for the project.
 
 === Wasmer
 
+Wasmer s a standalone Wasm runtime that supports running Wasm modules outside the browser. It provides a set of APIs for loading and executing Wasm modules, as well as mechanisms for interacting with the host codebase. Wasmer also has a registry of Wasm modules that can be used to share and distribute Wasm modules. These modules can also be deployed one the cloud using Wasmer's cloud service.
+
+However, Wasmer does supports the least amount of Wasm proposals out of the three runtimes (see @tbl_wasm_proposal_compatibility), which could limit the project's ability to demonstrate seamless embedding the functional language into different codebases.
+
+On the other hand, Wasmer provides a large set of SDKs for different programming languages (see @tbl_wasm_language_support @wasmer_sdks). Compared to the other runtimes Wasmer has the most extensive support for different programming languages. Which is important for the project since the functional language subset should be able to be embedded into different codebases.
+
 === Wasmtime
 
+As with Wasmer, Wasmtime is a standalone Wasm runtime that supports running Wasm modules outside the browser. It is developed by the Bytecode Alliance, a group of companies and individuals working on WebAssembly and related technologies. To see the full list supported Wasm proposals see @tbl_wasm_proposal_compatibility @wasmtime_sdks and for the supported programming languages see @tbl_wasm_language_support.
+
+Wasmtime is the only runtime that supports the component model proposal, which could be beneficial for greatly simplifying the embedding of the functional language into different codebases.
+
 === WasmEdge
+
+As with the other runtimes, WasmEdge is a standalone Wasm runtime that supports running Wasm modules outside the browser. It is developed by the Second State, a company that provides a platform for building and deploying Wasm applications. WasmEdge supports almost all Wasm proposals (see @tbl_wasm_proposal_compatibility @wasmedge_proposals). It achieves this by running JavaScript code in a sandboxed environment and can so support the browser's implementation of Wasm.
+
+However, WasmEdge supportes fewer programming languages than Wasmer and Wasmtime (see @tbl_wasm_language_support @wasmedge_sdks). This could limit the project's ability to demonstrate embedding the functional language into different codebases.
+
+=== Wasm proposal compatibility and language support
+
+@tbl_wasm_proposal_compatibility shows a summary of the compatibility of the Wasm proposals with the different runtimes @wasm_features.
+
+#figure(
+  table(
+    columns: 5,
+    inset: 6pt,
+    stroke: none,
+    align: (left, center, center, center, center),
+    table.header([*Proposal*], [*Wasmer*], [*Wasmtime*], [*WasmEdge*], [*Browser*]),
+    table.hline(stroke: 1pt),
+    table.vline(stroke: 1pt, x: 1),
+    [Reference types], [\u{2713}], [\u{2713}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [Function references], [\u{d7}], [\u{2713}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [Garbage collection], [\u{d7}], [\u{d7}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [Tail call optimization], [\u{d7}], [\u{2713}], [\u{2713}], [\u{2713}],
+  ),
+  caption: [Summary of Wasm proposal compatibility with different runtimes.],
+) <tbl_wasm_proposal_compatibility>
+
+@tbl_wasm_language_support shows a summary of the language support of the different runtimes @wasm_features.
+
+#figure(
+  table(
+    columns: 4,
+    inset: 6pt,
+    stroke: none,
+    align: (left, center, center, center, center),
+    table.header([*Language*], [*Wasmer*], [*Wasmtime*], [*WasmEdge*]),
+    table.hline(stroke: 1pt),
+    table.vline(stroke: 1pt, x: 1),
+    [Rust], [\u{2713}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [C/C++], [\u{2713}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [.NET (C\#, F\#, VB)], [\u{2713}], [\u{2713}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [D], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Python], [\u{2713}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [JavaScript], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Go], [\u{2713}], [\u{2713}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [PHP], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Ruby], [\u{2713}], [\u{2713}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Java], [\u{2713}], [\u{d7}], [\u{2713}],
+    table.hline(stroke: 0.5pt),
+    [R], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Postgres], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Swift], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Zig], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Dart], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Crystal], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Common Lisp], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Julia], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [V], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [OCaml], [\u{2713}], [\u{d7}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Elixir], [\u{d7}], [\u{2713}], [\u{d7}],
+    table.hline(stroke: 0.5pt),
+    [Perl], [\u{d7}], [\u{2713}], [\u{d7}],
+  ),
+  caption: [Summary of language support of different runtimes.],
+) <tbl_wasm_language_support>
 
 == Choice of compiler technology
 
 The choice of compiler technology is essential for the project's success. The compiler should be able to translate the functional language subset into efficient #glss("wasm") bytecode. The following technologies were considered for the project.
 
-#todo("add choice of compiler technology (specify the Wasm compatibility, the functional features, the standard library)")
-
 === LLVM
+
+LLVM is a collection of modular and reusable compiler and toolchain technologies. It is widely used in industry and academia for developing compilers, static analysis tools, and runtime environments. LLVM provides a set of libraries and tools for building compilers, including a compiler front-end (Clang), a compiler back-end (LLVM Core), and a set of optimization passes.
+
+By making a compiler front-end that translates the functional language subset into LLVM intermediate representation (IR), the project could leverage LLVM's existing infrastructure for optimizing and generating efficient machine code. The LLVM IR can then be translated into #glss("wasm") bytecode using the Binaryen toolchain. Additionally targeting LLVM IR would allow the project to compile the functional language to other targets like x86, ARM, or RISC-V.
+
+However, LLVM's complexity and the learning curve associated with it could make it challenging to implement within the project's timeframe. The project would also need to define a subset of the functional language that can be efficiently translated into LLVM IR.
+
+Advantages:
+- Efficient optimization and code generation capabilities.
+- Support for multiple targets and architectures.
+- Existing infrastructure for building compilers and toolchains.
+
+Disadvantages:
+- Complexity and learning curve associated with LLVM.
+- Need to define a subset of the functional language that can be efficiently translated into LLVM IR.
 
 === Manual translation
 
+Manual translation refers to the process of writing a custom compiler that directly translates the functional language subset into #glss("wasm") bytecode without using an intermediate representation like LLVM IR. This approach would involve defining a custom compiler architecture that parses the functional language syntax, performs semantic analysis, and generates #glss("wasm") bytecode.
+
+While manual translation provides full control over the compilation process and allows for tailoring the compiler to the project's specific requirements, it can be time-consuming and error-prone. The project would need to implement lexing, parsing, type checking, and code generation from scratch.
+
+Advantages:
+- Full control over the compilation process (e.g., Wasm proposal compatibility, embedded runtime support, etc.).
+- Tailoring the compiler to the project's specific requirements.
+Disadvantages:
+- Time-consuming and error-prone implementation.
+- No existing infrastructure for optimization and code generation.
+
 === Binaryen
+
+
 
 == How the GHC Haskell compiler works
 
+This chapter is inspired by notes from a lecture on the GHC compiler at Stanford University @ghc_compiler.
+
+The Glasgow Haskell Compiler (GHC) is the most widely used Haskell compiler and provides a reference implementation for the Haskell language. GHC translates Haskell source code into intermediate representations (IRs) and eventually into machine code. The compilation process in GHC involves several stages, each performing specific tasks to optimize and generate efficient code.
+
+
+In summary, the compilation process in GHC consists of the following stages (see @fig_ghc_compiler):
++ First the Haskell source code typed checked and desugared into a simplified intermediate representation (Core). This representation is very similar to the original Haskell code but all syntactical constructs are removed or transformed into only let and case statement. All pattern matching definitions for functions are also reduced to a lambda abstraction with a case statement. This enables to simplify the code and make it easier to optimize. The places where allocations take place (let bindings) and the place expressions get evaluated (case statements) are more clear to see and it is easier to reason about the execution order of the program.
++ The Core representation is then optimized using a set of optimization passes. These passes include inlining, constant folding, dead code elimination, and other optimizations that aim to improve the performance of the code. The optimizations are applied in a sequence of passes, each pass transforming the Core representation to a more optimized version.
++ The optimized Core representation is then translated into a lower-level intermediate representation called STG (Spineless Tagless G-machine). The STG representation is closer to the actual execution model of the Haskell runtime system and provides a more detailed view of the program's evaluation. In this representation the allocations only take place in the let bindings and evaluation only takes place in the case statements. The difference to the Core representation is that the STG representation is more detailed and provides more information about the evaluation order of the program, e.g. function application are represented as a thunk (a closure that takes no arguments) that gets evaluated when needed.
++ The STG representation is further optimized using a set of machine-independent optimizations. The optimizations are applied in a sequence of passes, each pass transforming the STG representation to a more optimized version.
++ The optimized STG representation is then translated into a lower-level intermediate representation called Cmm (C minus minus). The Cmm representation is a low-level imperative language that closely resembles the actual machine code that will be generated. In this representation, the program is represented as a sequence of instructions that manipulate memory and perform computations.
++ The Cmm representation is further optimized using a set of machine-dependent optimizations. Compiler backends can then generate efficient machine code for the target architecture, C code, or LLVM IR.
+
+#figure(
+  image("img/ghc_compiler.png", width: 60%),
+  caption: [Compilation process in the GHC Haskell compiler (taken form the lecture @ghc_compiler).],
+) <fig_ghc_compiler>
+
 == Other technological choices
 
-#todo("add other technological choices")
+The following technological choices were made for the project.
 
 === Gitlab
 
+Gitlab is a web-based DevOps lifecycle tool that provides a Git repository manager providing wiki, issue-tracking, and CI/CD pipeline features. It is widely used in industry and academia for managing software projects and collaborating on code development. In the context of the project, Gitlab will be used to host the project's source code, issue-tracking, documentation, and CI/CD pipelines. The CI/CD pipelines in Gitlab will be used to automate the linting, testing, and deployment of the build artifacts.
+
 === Typst
 
+The documentation for the project will be written in Typst, a typesetting system that allows for the creation of structured documents designed to be a modern alternative to LaTeX. Typst provides a simple and intuitive syntax for writing documents, including support for figures, tables, code blocks, a package ecosystem, and mathematical expressions.
+
+Mr. Supcik provided a template for the project's documentation, which includes a title page, table of contents, list of figures, list of tables, a header and footer, and a bibliography. The author introduced a glossary, a syntax file for the Wasm text format to enable syntax highlighting, and some styling changes to the template.
+
 === Language for the compiler
+
+Rust is a systems programming language that focuses on safety, speed, and concurrency. It is widely used in industry and academia for developing high-performance software, operating systems, and embedded systems. Rust's memory safety features, zero-cost abstractions, and modern tooling make it an ideal choice for implementing the compiler for the functional language subset.
+
+Rust also has great support for WebAssembly and all its runtime environments. The Rust compiler can target WebAssembly directly and the Rust ecosystem provides tools and libraries for working with WebAssembly.
 
 = Design
 
 This section describes the design of the functional language, compiler, and standard library. It includes the lexical and context-free syntax of the language, the compiler's architecture, and the standard library's design.
 
-#todo("add design of the functional language, compiler, and standard library")
+== Language specification
 
-== Lexical syntax
+The syntax of the functional language (named "Waskell")
+is as already mentioned a subset of Haskell. There is a language specification document that defines the syntax and semantics of Haskell made by the Haskell team @haskell_spec. The Lexical syntax and context-free syntax of the functional language are based on this document. The lexical syntax refers to the rules that define how the characters in the source code are grouped into tokens. The context-free syntax refers to the rules that define how the tokens are grouped into expressions, declarations, and other constructs.
 
-== Context-free syntax
+=== Lexical syntax
 
-Skipped features:
+The lexical syntax of Waskell is identical to Haskell. @lst_lexical_syntax shows the lexical syntax of the functional language (the text after the annotations is the token's name used in the compiler).
 
-- irrefutable patterns + pattern bindings
-- typed expressions
-- holes
-- operator stuff ?? (precedence, associativity, fixity, arity > 2 operators / paren func def thing)
-  - "(a &\* b) c = ..."
+#figure(
+  code_block(bnf(
+    Prod(
+      $e$,
+      annot: $sans("Expr")$,
+      {
+        Or[$x$][_variable_]
+        Or[$λ x. e$][_abstraction_]
+        Or[$e$ $e$][_application_]
+      },
+    ),
+  )),
+  supplement: [Listing],
+  caption: [Lexical syntax of the functional language.],
+) <lst_lexical_syntax>
+
+#todo("add the lexical syntax")
+
+=== Context-free syntax
+
+The context-free syntax of Waskell is a subset of Haskell (defined in report @haskell_spec). The context-free syntax of Waskell is based on this document. @lst_context_free_syntax shows the context-free syntax of the functional language (the text after the annotations is the non-terminal's name used in the compiler).
+
+#figure(
+  code_block(bnf(
+    Prod(
+      $e$,
+      annot: $sans("Expr")$,
+      {
+        Or[$x$][_variable_]
+        Or[$λ x. e$][_abstraction_]
+        Or[$e$ $e$][_application_]
+      },
+    ),
+  )),
+  supplement: [Listing],
+  caption: [Context-free syntax of the functional language.],
+) <lst_context_free_syntax>
+
+#todo("add the context-free syntax")
+
+=== Language features
+
+//Skipped features:
+
+//- irrefutable patterns + pattern bindings
+//- typed expressions
+//- holes
+//- operator stuff ?? (precedence, associativity, fixity, arity > 2 operators / paren func def thing)
+  //- "(a &\* b) c = ..."
+
+In short the subset of Haskell that is used in Waskell is the following:
+- Let bindings (and where bindings)
+- Lambda abstractions
+- Function application and currying
+- If expressions
+- Case expressions
+- Guards on function definitions and case expressions
+- Simple pattern matching (no irrefutable patterns)
+- Forced type annotations (no type inference)
+- Simple types (Int, Bool, Char, String, List, Tuple)
+- Simple type polymorphism (no type classes)
+- Support for custom operators (no fixity, associativity, precedence)
+
+#todo("keep language feature list up to date because that might change and add examples of the features and their limitations")
+
+=== Standard library design
+
+// maybe consider Rational, from and to Enum, error handeling??
+
+#todo("keep the standard library design up to date")
+
+The standard library of the functional language is a subset of the Haskell standard library (or the Prelude). The standard library provides a set of functions and types that are commonly used in functional programming. The standard library includes functions for working with lists, tuples, numbers, and other data types. The design of the standard library is based on the Haskell standard library documentation @haskell_prelude.
+
+#heading("Basic types", level: 4, numbering: none, outlined: false)
+
+@lst_basic_types shows the list of basic types in the standard library.
+
+#figure(
+  code_block[```haskell
+  -- Boolean type with values True and False.
+  data Bool = True | False
+  -- Character type representing Unicode characters.
+  data Char = ...
+  -- Integer type with fixed precision.
+  data Int = ...
+  -- Floating-point type with single precision.
+  data Float = ...
+  -- Floating-point type with double precision.
+  data Double = ...
+  -- String type representing lists of characters (alias for [Char]).
+  type String = [Char]
+  -- List of elements of type a (two constructors: [] and :).
+  data [a] = [] | a : [a]
+  -- Tuple type with n elements of types a, b, ..., z.
+  data (a, b, ..., z) = ...
+  -- Unit type with a single value denoted by ().
+  data () = ...
+  -- Maybe type representing optional values.
+  data Maybe a = Nothing | Just a
+  -- Either type representing disjoint unions.
+  data Either a b = Left a | Right b
+  ```],
+  caption: [The list of basic types in the standard library.],
+) <lst_basic_types>
+
+#heading("Boolean functions", level: 4, numbering: none, outlined: false)
+
+@lst_boolean_functions shows the list of functions for working with booleans in the standard library.
+
+#figure(
+  code_block[```haskell
+  not :: Bool -> Bool -- Negates a boolean value.
+  (&&), (||) :: Bool -> Bool -> Bool -- Logical AND and OR operations.
+  otherwise :: Bool -- Always returns True (useful in guards).
+  ```],
+  caption: [The list of functions for working with booleans.],
+) <lst_boolean_functions>
+
+#heading("Numeric functions", level: 4, numbering: none, outlined: false)
+
+@lst_numeric_functions shows the list of functions for working with numbers in the standard library.
+
+#todo("remove use of type classes and replace by implemented solution")bool
+
+#figure(
+  code_block[```haskell
+  data Ordering = LT | EQ | GT -- Ordering type for comparison results.
+  compare :: Ord a => a -> a -> Ordering -- Compares two values.
+  (+), (-), (*) :: Num a => a -> a -> a -- Addition, subtraction, and multiplication.
+  negate, abs, signum :: Num a => a -> a -- Absolute value and signum.
+  (==), (/=), (<), (<=), (>), (>=) :: Ord a => a -> a -> Bool -- Comparison operations.
+  min, max :: Ord a => a -> a -> a -- Minimum and maximum of two values.
+  minBound, maxBound :: Bounded a => a -- Smallest and largest value of a type.
+  quot, rem, div, mod :: Integral a => a -> a -> a -- Quotient and remainder operations.
+  quotRem, divMod :: Integral a => a -> a -> (a, a) -- Quotient and remainder as a pair.
+  (/) :: Fractional a => a -> a -> a -- Division operation.
+  recip :: Fractional a => a -> a -- Reciprocal of a value.
+  pi :: Floating a => a -- The value of pi.
+  exp, log, sqrt :: Floating a => a -> a -- Exponential, logarithm, and square root.
+  (**), logBase :: Floating a => a -> a -> a -- Exponentiation and logarithm base.
+  sin, cos, tan :: Floating a => a -> a -- Trigonometric functions.
+  asin, acos, atan :: Floating a => a -> a -- Inverse trigonometric functions.
+  sinh, cosh, tanh :: Floating a => a -> a -- Hyperbolic functions.
+  asinh, acosh, atanh :: Floating a => a -> a -- Inverse hyperbolic functions.
+  isNaN, isInfinite :: RealFloat a => a -> Bool -- Checks for NaN and infinity.
+  truncate, round, ceiling, floor :: RealFrac a => a -> Int -- Rounding operations.
+  even, odd :: Integral a => a -> Bool -- Checks for even and odd numbers.
+  (^) :: (Num a, Integral b) => a -> b -> a -- Exponentiation operation.
+  ```],
+  caption: [The list of functions for working with numbers.],
+) <lst_numeric_functions>
+
+#heading("List functions", level: 4, numbering: none, outlined: false)
+
+@lst_list_functions shows the list of functions for working with lists in the standard library.
+
+#figure(
+  code_block[```haskell
+  head :: [a] -> a -- Returns the first element of a list.
+  (!!): [a] -> Int -> a -- Returns the element at a specific index.
+  last :: [a] -> a -- Returns the last element of a list.
+  tail :: [a] -> [a] -- Returns the list without the first element.
+  init :: [a] -> [a] -- Returns the list without the last element.
+  take :: Int -> [a] -> [a] -- Takes the first n elements of a list.
+  drop :: Int -> [a] -> [a] -- Drops the first n elements of a list.
+  splitAt :: Int -> [a] -> ([a], [a]) -- Splits a list at a specific index.
+  takeWhile :: (a -> Bool) -> [a] -> [a] -- Takes elements from a list while a predicate is true.
+  dropWhile :: (a -> Bool) -> [a] -> [a] -- Drops elements from a list while a predicate is true.
+  span :: (a -> Bool) -> [a] -> ([a], [a]) -- Splits a list into two parts based on a predicate.
+  break :: (a -> Bool) -> [a] -> ([a], [a]) -- Splits a list into two parts based on a predicate.
+  map :: (a -> b) -> [a] -> [b] -- Applies a function to each element of a list.
+  filter :: (a -> Bool) -> [a] -> [a] -- Filters a list based on a predicate.
+  foldr :: (a -> b -> b) -> b -> [a] -> b -- Folds a list from the right.
+  foldl :: (b -> a -> b) -> b -> [a] -> b -- Folds a list from the left.
+  foldr1 :: (a -> a -> a) -> [a] -> a -- Folds a non-empty list from the right.
+  foldl1 :: (a -> a -> a) -> [a] -> a -- Folds a non-empty list from the left.
+  scanr :: (a -> b -> b) -> b -> [a] -> [b] -- Scans a list from the right.
+  scanr1 :: (a -> a -> a) -> [a] -> [a] -- Scans a non-empty list from the right.
+  scanl :: (b -> a -> b) -> b -> [a] -> [b] -- Scans a list from the left.
+  scanl1 :: (a -> a -> a) -> [a] -> [a] -- Scans a non-empty list from the left.
+  iterate :: (a -> a) -> a -> [a] -- Generates an infinite list by repeatedly applying a function.
+  repeat :: a -> [a] -- Generates an infinite list with a single element.
+  cycle :: [a] -> [a] -- Generates an infinite list by cycling a list.
+  zip :: [a] -> [b] -> [(a, b)] -- Zips two lists together.
+  (++), concat :: [a] -> [a] -> [a] -- Concatenates two lists.
+  null :: [a] -> Bool -- Checks if a list is empty.
+  length :: [a] -> Int -- Returns the length of a list.
+  reverse :: [a] -> [a] -- Reverses a list.
+  any :: (a -> Bool) -> [a] -> Bool -- Checks if any element satisfies a predicate.
+  all :: (a -> Bool) -> [a] -> Bool -- Checks if all elements satisfy a predicate.
+  and :: [Bool] -> Bool -- Checks if all elements are true.
+  or :: [Bool] -> Bool -- Checks if any element is true.
+  sum :: [Int] -> Int -- Sums the elements of a list.
+  product :: [Int] -> Int -- Multiplies the elements of a list.
+  maximum :: [a] -> a -- Returns the maximum element of a list.
+  minimum :: [a] -> a -- Returns the minimum element of a list.
+  ```],
+  caption: [The list of functions for working with lists.],
+) <lst_list_functions>
+
+#heading("Tuple functions", level: 4, numbering: none, outlined: false)
+
+@lst_tuple_functions shows the list of functions for working with tuples in the standard library.
+
+#figure(
+  code_block[```haskell
+  fst :: (a, b) -> a -- Returns the first element of a tuple.
+  snd :: (a, b) -> b -- Returns the second element of a tuple.
+  curry :: ((a, b) -> c) -> a -> b -> c -- Curries a function.
+  uncurry :: (a -> b -> c) -> (a, b) -> c -- Uncurries a function.
+  ```],
+  caption: [The list of functions for working with tuples.],
+) <lst_tuple_functions>
+
+#heading("String functions", level: 4, numbering: none, outlined: false)
+
+@lst_string_functions shows the list of functions for working with strings in the standard library.
+
+#figure(
+  code_block[```haskell
+  lines :: String -> [String] -- Splits a string into lines.
+  words :: String -> [String] -- Splits a string into words.
+  unlines :: [String] -> String -- Joins lines into a string.
+  unwords :: [String] -> String -- Joins words into a string.
+  ```],
+  caption: [The list of functions for working with strings.],
+) <lst_string_functions>
+
+#heading("Miscellaneous functions", level: 4, numbering: none, outlined: false)
+
+@lst_misc_functions shows the list of miscellaneous functions in the standard library.
+
+#figure(
+  code_block[```haskell
+  maybe :: b -> (a -> b) -> Maybe a -> b -- Handles optional values.
+  either :: (a -> c) -> (b -> c) -> Either a b -> c -- Handles disjoint unions.
+
+  id :: a -> a -- Identity function.
+  const :: a -> b -> a -- Constant function.
+  flip :: (a -> b -> c) -> b -> a -> c -- Flips the arguments of a function.
+  ($) :: (a -> b) -> a -> b -- Function application operator.
+  (.) :: (b -> c) -> (a -> b) -> a -> c -- Function composition operator.
+  until :: (a -> Bool) -> (a -> a) -> a -> a -- Repeatedly applies a function until a predicate is true.
+  error :: String -> a -- Throws an error with a message.
+  undefined :: a -- Throws an undefined error.
+  ```],
+  caption: [The list of miscellaneous functions.],
+) <lst_misc_functions>
 
 == Compiler architecture
-
-== Language features
-
-== Standard library design
 
 = Implementation
 
