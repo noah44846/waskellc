@@ -1,2 +1,2 @@
-square :: Int -> Int
-square x = x * x
+square :: Int -> Int -> Int
+square x y = x * x * y

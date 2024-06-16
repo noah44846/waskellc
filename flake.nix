@@ -35,6 +35,8 @@
 
             nodejs_20
             nodePackages.npm
+
+            ghc
           ];
 
           PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig";

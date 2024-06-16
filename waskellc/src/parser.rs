@@ -73,7 +73,7 @@ fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct TopDeclarations(Vec<TopDeclaration>);
+pub struct TopDeclarations(pub Vec<TopDeclaration>);
 
 impl TopDeclarations {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
@@ -133,7 +133,7 @@ impl TopDeclaration {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct FunctionType(Vec<Type>);
+pub struct FunctionType(pub Vec<Type>);
 
 impl FunctionType {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
@@ -155,7 +155,7 @@ impl FunctionType {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Type(Vec<TypeApplicationElement>);
+pub struct Type(pub Vec<TypeApplicationElement>);
 
 impl Type {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
@@ -422,10 +422,8 @@ impl FunctionParameterExpression {
     }
 }
 
-pub fn parse(input: &str) {
+pub fn parse(input: &str) -> Result<TopDeclarations, String> {
     let mut tokens = Token::lexer(input).peekable();
 
-    let top_declarations = TopDeclarations::parse(&mut tokens);
-
-    println!("{:?}", top_declarations);
+    TopDeclarations::parse(&mut tokens)
 }

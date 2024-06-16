@@ -3,14 +3,14 @@
 //! Code gen module is responsible for generating the Wasm code from the AST of the Waskell
 //! programming language.
 
-use std::fs;
-
 use wasm_encoder::{
     CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module,
     TypeSection, ValType,
 };
 
-pub fn generate() {
+use crate::validator;
+
+pub fn generate(_: validator::SymbolTable) -> Result<Module, String> {
     // example code
 
     let mut module = Module::new();
@@ -44,8 +44,5 @@ pub fn generate() {
     codes.function(&f);
     module.section(&codes);
 
-    // Extract the encoded Wasm bytes for this module.
-    let wasm_bytes = module.finish();
-
-    fs::write("add.wasm", wasm_bytes).expect("Unable to write file");
+    Ok(module)
 }

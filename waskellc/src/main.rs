@@ -1,11 +1,19 @@
-use std::fs;
+use std::{env, fs};
 
-use waskellc::parser;
+use waskellc::compile;
 
-fn main() {
-    let file_contents = fs::read_to_string("examples/x_square.wsk").unwrap();
+fn main() -> Result<(), String> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("Usage: waskellc <filename>");
+        return Ok(());
+    }
 
-    parser::parse(&file_contents);
+    let file_contents = fs::read_to_string(&args[1]).unwrap();
 
-    waskellc::code_gen::generate();
+    let module = compile(&file_contents)?;
+
+    fs::write("out.wasm", module.finish()).unwrap();
+
+    Ok(())
 }
