@@ -13,7 +13,8 @@ use wasmtime::*;
 //mod wasi;
 //mod linking;
 //mod ref_types;
-mod tail_call;
+//mod tail_call;
+mod code_gen;
 
 fn main() -> Result<()> {
     //memory::memory_main()
@@ -21,5 +22,6 @@ fn main() -> Result<()> {
     //wasi::wasi_main()
     //linking::linking_main()
     //ref_types::ref_types_main()
-    tail_call::tail_call_main()
+    //tail_call::tail_call_main()
+    code_gen::code_gen_main()
 }
