@@ -1,8 +1,13 @@
 [package]
 name = "waskellc"
+description = "A compiler for the Waskell programming language (subset of Haskell) that targets WebAssembly."
+repository = "https://github.com/noah44846/waskellc"
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.5.7", features = ["derive"] }
 logos = "0.14.0"
 wasm-encoder = "0.210.0"
+wasmparser = "0.210.0"

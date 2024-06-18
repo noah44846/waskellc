@@ -32,6 +32,7 @@
             wasmer
             wasmedge
             wasm-tools
+            binaryen
 
             nodejs_20
             nodePackages.npm

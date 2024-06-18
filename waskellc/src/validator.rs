@@ -11,16 +11,16 @@ pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
 #[derive(PartialEq, Clone)]
 pub struct Symbol {
     name: String,
-    ty: Type,
-    expr: Option<Expression>,
-    scope: Option<Rc<RefCell<Symbol>>>,
+    pub ty: Type,
+    pub expr: Option<Expression>,
+    pub scope: Option<Rc<RefCell<Symbol>>>,
 }
 
 impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Symbol {{ name: {}, ty: {:?}, expr: {:?} }}",
+            "Symbol {{ name: {}, ty: {:?}, expr: {:#?} }}",
             self.name, self.ty, self.expr
         )
     }

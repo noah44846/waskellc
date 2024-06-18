@@ -6,7 +6,7 @@ pub mod code_gen;
 pub mod parser;
 pub mod validator;
 
-pub fn compile(file_contents: &str) -> Result<Module, String> {
+pub fn compile(file_contents: &str) -> Result<Vec<u8>, String> {
     let ast = parser::parse(file_contents)?;
     println!("AST:\n{:#?}", ast);
     let symbol_table = validator::validate(ast)?;
