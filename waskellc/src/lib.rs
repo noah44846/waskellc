@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 //! The waskellc crate is a compiler for the Waskell language.
 
 use wasm_encoder::Module;
