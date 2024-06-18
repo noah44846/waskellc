@@ -7,6 +7,11 @@
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 
+# If os is darwin, change it to macos
+if [ $os == "darwin" ]; then
+  os="macos"
+fi
+
 # Download version 117 of binaryen
 wget https://github.com/WebAssembly/binaryen/releases/download/version_117/binaryen-version_117-${arch}-${os}.tar.gz
 
