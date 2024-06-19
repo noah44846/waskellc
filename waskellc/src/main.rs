@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use std::{
-    fs,
-    process::{Command, Output},
-};
+use std::{fs, process::Command};
 
 use clap::Parser;
 
@@ -19,7 +16,7 @@ struct Args {
 }
 
 fn out_path(in_path: &str) -> String {
-    let mut split = in_path.split(".").collect::<Vec<&str>>();
+    let mut split = in_path.split('.').collect::<Vec<&str>>();
     let split_len = split.len();
     split[split_len - 1] = "wasm";
     split.join(".")
@@ -46,7 +43,7 @@ fn merge_command(out_path: &str) -> Result<(), String> {
         .arg(out_path)
         .arg("out")
         .arg("-o")
-        .arg(out_path.to_owned())
+        .arg(out_path)
         .output()
         .expect("Failed to merge wasm files");
 

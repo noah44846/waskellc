@@ -9,7 +9,7 @@ pub fn code_gen_main() -> Result<()> {
 
     //let linking1 = Module::from_file(&engine, "wasm_code/code_gen/lib.wasm")?;
     //let linking2 = Module::from_file(&engine, "wasm_code/code_gen/use.wat")?;
-    let linking2 = Module::from_file(&engine, "wasm_code/code_gen/merged.wasm")?;
+    let linking2 = Module::from_file(&engine, "wasm_code/code_gen/out.wasm")?;
     let mut linker = Linker::new(&engine);
     wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
 
@@ -36,13 +36,13 @@ pub fn code_gen_main() -> Result<()> {
     // square (square 2)
     let val_ptr = make_val.call(&mut store, 2)?;
 
-    let env_ptr1 = make_env.call(&mut store, (1, 3))?;
+    let env_ptr1 = make_env.call(&mut store, (1, 11))?;
     let val_ptr_parts = val_ptr.to_le_bytes();
     memory.write(&mut store, (env_ptr1 + 4) as usize, &val_ptr_parts)?;
 
     let closure_ptr1 = make_closure.call(&mut store, (1, env_ptr1))?;
 
-    let env_ptr2 = make_env.call(&mut store, (1, 3))?;
+    let env_ptr2 = make_env.call(&mut store, (1, 11))?;
     let closure_ptr1_parts = closure_ptr1.to_le_bytes();
     memory.write(&mut store, (env_ptr2 + 4) as usize, &closure_ptr1_parts)?;
 

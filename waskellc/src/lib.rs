@@ -2,8 +2,6 @@
 
 //! The waskellc crate is a compiler for the Waskell language.
 
-use wasm_encoder::Module;
-
 pub mod code_gen;
 pub mod parser;
 pub mod validator;

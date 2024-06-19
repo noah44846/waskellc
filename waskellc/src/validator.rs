@@ -10,7 +10,7 @@ pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
 
 #[derive(PartialEq, Clone)]
 pub struct Symbol {
-    name: String,
+    pub name: String,
     pub ty: Type,
     pub expr: Option<Expression>,
     pub scope: Option<Rc<RefCell<Symbol>>>,
@@ -72,7 +72,7 @@ pub enum Expression {
     CharLiteral(char),
     Symbol(Rc<RefCell<Symbol>>),
     FunctionApplication(Vec<Expression>),
-    LambdaAbstraction(u8, Box<Expression>),
+    LambdaAbstraction(Vec<String>, Box<Expression>),
     // case expression...
 }
 
@@ -126,7 +126,7 @@ fn parser_expr_to_expr(
             let lhs_expr = parser_lhs_expr_to_expr(*lhs, context, symbol_table)?;
             let rhs_expr = parser_expr_to_expr(*rhs, context, symbol_table)?;
             let op = symbol_table
-                .get(&format!("{}", op))
+                .get(&op.to_string())
                 .ok_or(format!("Operator {} not found", op))?;
             Ok(Expression::FunctionApplication(vec![
                 Expression::Symbol(op.clone()),
@@ -231,9 +231,8 @@ fn add_function_decl_to_symbol(
         .ok_or(format!("Function type signature for {} not found", name))?;
     let symbol = symbol.clone();
 
-    let mut count = 0;
+    let mut sym_params = vec![];
     for (i, param) in lhs.into_iter().enumerate() {
-        count += 1;
         match param {
             parser::FunctionParameterPattern::AsPattern(name, None) => {
                 let symbol_ref = (*symbol).borrow();
@@ -244,12 +243,13 @@ fn add_function_decl_to_symbol(
                 symbol_table.insert(
                     name.clone(),
                     Rc::new(RefCell::new(Symbol {
-                        name,
+                        name: name.clone(),
                         ty: ty.clone(),
                         expr: None,
                         scope: Some(symbol.clone()),
                     })),
                 );
+                sym_params.push(name);
             }
             _ => todo!(),
         }
@@ -257,15 +257,11 @@ fn add_function_decl_to_symbol(
 
     let expr = parser_expr_to_expr(rhs, &(*symbol).borrow(), symbol_table)?;
     let mut symbol_ref = (*symbol).borrow_mut();
-    symbol_ref.expr = Some(Expression::LambdaAbstraction(count, Box::new(expr)));
+    symbol_ref.expr = Some(Expression::LambdaAbstraction(sym_params, Box::new(expr)));
     Ok(())
 }
 
-fn type_check_expr(
-    expr: &Expression,
-    context: &Symbol,
-    symbol_table: &SymbolTable,
-) -> Result<Type, String> {
+fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, String> {
     match expr {
         Expression::IntLiteral(_) => Ok(Type::Int),
         Expression::FloatLiteral(_) => Ok(Type::Float),
@@ -280,11 +276,12 @@ fn type_check_expr(
                 return Err("Function application must have at least one parameter".to_string());
             }
 
-            let mut exprs_iter = exprs.into_iter();
-            let func = exprs_iter
+            let exprs_iter = exprs.iter();
+            let func = exprs
+                .iter()
                 .next()
                 .ok_or("Function application must have at least one parameter")?;
-            let func_ty = type_check_expr(func, context, symbol_table)?;
+            let func_ty = type_check_expr(func, context)?;
             if let Type::Function(_) = func_ty {
             } else {
                 return Err(format!("Can't apply a value of type {:?}", func_ty));
@@ -292,7 +289,7 @@ fn type_check_expr(
 
             let mut param_tys = vec![];
             for expr in exprs_iter {
-                let ty = type_check_expr(expr, context, symbol_table)?;
+                let ty = type_check_expr(expr, context)?;
                 param_tys.push(ty);
             }
 
@@ -317,19 +314,19 @@ fn type_check_expr(
                 _ => unreachable!(),
             }
         }
-        Expression::LambdaAbstraction(arity, expr) => {
-            let expr_ty = type_check_expr(expr, context, symbol_table)?;
+        Expression::LambdaAbstraction(params, expr) => {
+            let expr_ty = type_check_expr(expr, context)?;
 
-            if context.arity() < *arity {
+            if context.arity() < params.len() as u8 {
                 return Err("Lambda expression has wrong arity".to_string());
             }
 
+            #[allow(clippy::single_match)]
             match expr_ty {
                 Type::Function(ref params) => match &context.ty {
                     Type::Function(ctx_params) => {
                         // drop the first n params (n = arity)
-                        let ctx_params =
-                            ctx_params.iter().skip(*arity as usize).collect::<Vec<_>>();
+                        let ctx_params = ctx_params.iter().skip(params.len()).collect::<Vec<_>>();
 
                         // check if the number of params match
                         if ctx_params.len() != params.len() {
@@ -419,7 +416,6 @@ pub fn validate(ast: parser::TopDeclarations) -> Result<SymbolTable, String> {
                 type_check_expr(
                     &(*symbol).borrow().expr.as_ref().unwrap().clone(),
                     &(symbol).borrow(),
-                    &symbol_table,
                 )?;
             }
         }
