@@ -66,19 +66,24 @@ impl CodeGen {
     }
 
     fn generate(mut self) -> Result<Vec<u8>, String> {
-        for symbol in self.symbol_table.clone().values() {
-            // skip non global symbols
-            if (**symbol).borrow().scope.is_some() {
-                continue;
-            }
-
-            // skip if the function is already generated
-            if self.functions.exists(&(**symbol).borrow().name) {
-                continue;
-            }
-
-            self.generate_function(&symbol.clone())?;
-        }
+        self.symbol_table
+            .clone()
+            .values()
+            .filter(|s| {
+                let s = (**s).borrow();
+                s.scope.is_none() && !self.functions.exists(&s.name)
+            })
+            .collect::<Vec<_>>()
+            // create signature for each symbol so they can be called while generating the function body
+            .iter()
+            .map(|s| match self.create_signature(s) {
+                Ok(_) => Ok(s),
+                Err(e) => Err(e),
+            })
+            .collect::<Result<Vec<_>, String>>()?
+            .iter()
+            .map(|s| self.generate_function_body(s))
+            .collect::<Result<Vec<_>, String>>()?;
 
         let type_section = self.function_types.type_section();
         let (import_section, function_section, export_section, element_section) =
@@ -98,21 +103,11 @@ impl CodeGen {
         Ok(wasm_bytes)
     }
 
-    fn generate_function(&mut self, symbol: &Rc<RefCell<validator::Symbol>>) -> Result<(), String> {
-        // TODO: skip if the function is already generated and the type is already in the type section
-        let func_type = self.create_signature(symbol)?;
-        self.generate_function_body(symbol, func_type)?;
-
-        Ok(())
-    }
-
-    fn create_signature(
-        &mut self,
-        symbol: &Rc<RefCell<validator::Symbol>>,
-    ) -> Result<EntityType, String> {
+    fn create_signature(&mut self, symbol: &Rc<RefCell<validator::Symbol>>) -> Result<(), String> {
         let mut params = vec![];
+        let symbol_ref = &(**symbol).borrow();
 
-        match &(**symbol).borrow().ty {
+        match &symbol_ref.ty {
             validator::Type::Function(func_params) => {
                 // put the last element of the params as the result and the rest as the params
                 if func_params.is_empty() {
@@ -131,13 +126,25 @@ impl CodeGen {
             _ => todo!(),
         }
 
-        Ok(self.function_types.function_type(params).unwrap())
+        let func_type = self.function_types.function_type(params).unwrap();
+        if let EntityType::Function(type_index) = func_type {
+            self.functions
+                .add_function(&symbol_ref.name, type_index)
+                .ok_or(format!(
+                    "Function {} already exists in the function table",
+                    symbol_ref.name
+                ))?;
+            self.functions.export(&symbol_ref.name).unwrap();
+        } else {
+            unreachable!();
+        }
+
+        Ok(())
     }
 
     fn generate_function_body(
         &mut self,
         symbol: &Rc<RefCell<validator::Symbol>>,
-        func_ty: EntityType,
     ) -> Result<(), String> {
         let mut locals = vec![];
         let mut instrs = vec![];
@@ -176,21 +183,8 @@ impl CodeGen {
             f.instruction(instr);
         });
 
-        if let EntityType::Function(type_index) = func_ty {
-            let name = &(**symbol).borrow().name;
-            self.functions
-                .add_function(name, type_index)
-                .ok_or(format!(
-                    "Function {} already exists in the function table",
-                    name
-                ))?;
-            self.functions.table_index(name).unwrap();
-            self.functions.export(name).unwrap();
-            self.code_section.function(&f);
-            Ok(())
-        } else {
-            unreachable!();
-        }
+        self.code_section.function(&f);
+        Ok(())
     }
 
     fn generate_instructions_from_main(
