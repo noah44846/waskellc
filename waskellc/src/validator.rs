@@ -276,9 +276,8 @@ fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, String> 
                 return Err("Function application must have at least one parameter".to_string());
             }
 
-            let exprs_iter = exprs.iter();
-            let func = exprs
-                .iter()
+            let mut exprs_iter = exprs.iter();
+            let func = exprs_iter
                 .next()
                 .ok_or("Function application must have at least one parameter")?;
             let func_ty = type_check_expr(func, context)?;
@@ -296,6 +295,7 @@ fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, String> 
             match func_ty {
                 Type::Function(tys) => {
                     if tys.len() - 1 != param_tys.len() {
+                        println!("{:#?} {:#?}", tys, param_tys);
                         return Err(
                             "Function application has wrong number of parameters".to_string()
                         );

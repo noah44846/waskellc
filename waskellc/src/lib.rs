@@ -11,5 +11,5 @@ pub fn compile(file_contents: &str) -> Result<Vec<u8>, String> {
     println!("AST:\n{:#?}", ast);
     let symbol_table = validator::validate(ast)?;
     println!("Symbol Table:\n{:#?}", symbol_table);
-    code_gen::generate(symbol_table)
+    code_gen::generate_code(symbol_table)
 }

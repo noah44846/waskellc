@@ -3,90 +3,26 @@
 //! Code gen module is responsible for generating the Wasm code from the AST of the Waskell
 //! programming language.
 
-use std::{
-    cell::RefCell,
-    collections::{hash_map, HashMap},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use wasm_encoder::*;
 
+use crate::code_gen::encoder_wrapper::{DeclaredWasmFunctionTypes, DeclaredWasmFunctions};
 use crate::validator;
 
-struct DeclaredWasmFunctionTypes {
-    map: HashMap<Vec<ValType>, EntityType>,
-    type_section: TypeSection,
-}
-
-impl DeclaredWasmFunctionTypes {
-    fn new(type_section: TypeSection) -> Self {
-        DeclaredWasmFunctionTypes {
-            map: HashMap::new(),
-            type_section,
-        }
-    }
-
-    fn function_type(&mut self, tys: Vec<ValType>) -> Option<EntityType> {
-        if tys.is_empty() {
-            return None;
-        }
-
-        if let hash_map::Entry::Vacant(e) = self.map.entry(tys.clone()) {
-            self.type_section
-                .function(Vec::from(&tys[..tys.len() - 1]), vec![*tys.last().unwrap()]);
-            let val = EntityType::Function(self.type_section.len() - 1);
-            e.insert(val);
-            return Some(val);
-        }
-
-        return self.map.get(&tys).cloned();
-    }
-}
-
-struct DeclaredWasmFunctionIndices {
-    function_index: u32,
-    table_index: u32,
-}
-
-impl DeclaredWasmFunctionIndices {
-    fn new(element_section: &mut ElementSection, function_index: u32) -> Self {
-        DeclaredWasmFunctionIndices {
-            function_index,
-            // + 2 because of the fn_app and value functions in the lib
-            table_index: element_section.len() + 2 - 1,
-        }
-    }
-}
-
 struct CodeGen {
-    import_section: ImportSection,
-    function_section: FunctionSection,
-    export_section: ExportSection,
-    element_section: ElementSection,
     code_section: CodeSection,
     function_types: DeclaredWasmFunctionTypes,
-    function_indices: HashMap<String, DeclaredWasmFunctionIndices>,
+    functions: DeclaredWasmFunctions,
     symbol_table: Rc<validator::SymbolTable>,
 }
 
-fn add_fn_to_table(element_section: &mut ElementSection, function_index: u32) {
-    element_section.active(
-        None,
-        // + 2 because of the fn_app and value functions in the lib
-        &ConstExpr::i32_const((element_section.len() + 2) as i32),
-        Elements::Functions(&[function_index]),
-    );
-}
-
 impl CodeGen {
-    pub fn new(symbol_table: validator::SymbolTable) -> Self {
-        let mut function_indices = HashMap::new();
-        let type_section = TypeSection::new();
-        let mut function_types = DeclaredWasmFunctionTypes::new(type_section);
+    fn new(symbol_table: validator::SymbolTable) -> Self {
+        let mut function_types = DeclaredWasmFunctionTypes::new();
         let mut import_section = ImportSection::new();
-        let mut element_section = ElementSection::new();
 
-        let _ = function_types.function_type(vec![ValType::I32]).unwrap();
+        function_types.function_type(vec![ValType::I32]).unwrap();
         let arg_1_int32_ret_int32 = function_types
             .function_type(vec![ValType::I32, ValType::I32])
             .unwrap();
@@ -95,16 +31,6 @@ impl CodeGen {
             .unwrap();
 
         // TODO: implement fn_app
-        import_section.import(
-            "lib",
-            "table",
-            EntityType::Table(TableType {
-                element_type: RefType::FUNCREF,
-                minimum: 128, // TODO: what is the minimum size of the table?
-                maximum: None,
-                table64: false,
-            }),
-        );
 
         // TODO: memory size ??
         import_section.import(
@@ -119,45 +45,30 @@ impl CodeGen {
             }),
         );
 
-        let mut handle_import = |name: &str, ty: EntityType| {
-            import_section.import("lib", name, ty);
-
-            // -2 because of the memory and table imports
-            let function_index = import_section.len() - 2 - 1;
-            add_fn_to_table(&mut element_section, function_index);
-
-            let declared_function_indecies =
-                DeclaredWasmFunctionIndices::new(&mut element_section, function_index);
-            function_indices.insert(name.to_owned(), declared_function_indecies);
-        };
-
-        [
-            ("eval", arg_1_int32_ret_int32),
-            ("make_closure", arg_2_int32_ret_int32),
-            ("make_env", arg_2_int32_ret_int32),
-            ("make_val", arg_1_int32_ret_int32),
-            ("negate", arg_1_int32_ret_int32),
-            ("+", arg_2_int32_ret_int32),
-            ("-", arg_2_int32_ret_int32),
-            ("*", arg_2_int32_ret_int32),
-            ("/", arg_2_int32_ret_int32),
-        ]
-        .iter()
-        .for_each(|(name, ty)| handle_import(name, *ty));
+        let functions = DeclaredWasmFunctions::new(
+            import_section,
+            &[
+                ("lib", "eval", arg_1_int32_ret_int32),
+                ("lib", "make_closure", arg_2_int32_ret_int32),
+                ("lib", "make_env", arg_2_int32_ret_int32),
+                ("lib", "make_val", arg_1_int32_ret_int32),
+                ("lib", "negate", arg_1_int32_ret_int32),
+                ("lib", "+", arg_2_int32_ret_int32),
+                ("lib", "-", arg_2_int32_ret_int32),
+                ("lib", "*", arg_2_int32_ret_int32),
+                ("lib", "/", arg_2_int32_ret_int32),
+            ],
+        );
 
         CodeGen {
-            import_section,
-            function_section: FunctionSection::new(),
-            export_section: ExportSection::new(),
-            element_section,
             code_section: CodeSection::new(),
             function_types,
-            function_indices,
+            functions,
             symbol_table: Rc::new(symbol_table),
         }
     }
 
-    pub fn generate(mut self) -> Result<Vec<u8>, String> {
+    fn generate(mut self) -> Result<Vec<u8>, String> {
         for symbol in self.symbol_table.clone().values() {
             // skip non global symbols
             if (**symbol).borrow().scope.is_some() {
@@ -165,23 +76,24 @@ impl CodeGen {
             }
 
             // skip if the function is already generated
-            if self
-                .function_indices
-                .contains_key(&(**symbol).borrow().name)
-            {
+            if self.functions.exists(&(**symbol).borrow().name) {
                 continue;
             }
 
             self.generate_function(&symbol.clone())?;
         }
 
+        let type_section = self.function_types.type_section();
+        let (import_section, function_section, export_section, element_section) =
+            self.functions.finish();
+
         let mut module = Module::new();
         module
-            .section(&self.function_types.type_section)
-            .section(&self.import_section)
-            .section(&self.function_section)
-            .section(&self.export_section)
-            .section(&self.element_section)
+            .section(&type_section)
+            .section(&import_section)
+            .section(&function_section)
+            .section(&export_section)
+            .section(&element_section)
             .section(&self.code_section);
 
         let wasm_bytes = module.finish();
@@ -238,7 +150,12 @@ impl CodeGen {
             "Function {} does not have an expression",
             symbol_ref.name
         ))?;
-        self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs)?;
+
+        if symbol_ref.name == "main" {
+            self.generate_instructions_from_main(expr, &mut locals, &mut instrs)?;
+        } else {
+            self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs)?;
+        }
 
         let mut rle_locals: Vec<(u32, ValType)> = vec![];
         if !locals.is_empty() {
@@ -263,35 +180,57 @@ impl CodeGen {
         });
 
         if let EntityType::Function(type_index) = func_ty {
-            self.function_section.function(type_index);
+            let name = &(**symbol).borrow().name;
+            self.functions
+                .add_function(name, type_index)
+                .ok_or(format!(
+                    "Function {} already exists in the function table",
+                    name
+                ))?;
+            self.functions.table_index(name).unwrap();
+            self.functions.export(name).unwrap();
             self.code_section.function(&f);
-
-            // the import section has -2 because of the memory import
-            let function_index = (self.import_section.len() - 2) + self.function_section.len() - 1;
-            add_fn_to_table(&mut self.element_section, function_index);
-
-            self.export_section
-                .export(&(**symbol).borrow().name, ExportKind::Func, function_index);
-
-            let declared_function_indecies =
-                DeclaredWasmFunctionIndices::new(&mut self.element_section, function_index);
-            self.function_indices
-                .insert((**symbol).borrow().name.clone(), declared_function_indecies);
             Ok(())
         } else {
             unreachable!();
         }
     }
 
+    fn generate_instructions_from_main(
+        &mut self,
+        expr: &validator::Expression,
+        locals: &mut Vec<ValType>,
+        instrs: &mut Vec<Instruction>,
+    ) -> Result<(), String> {
+        match expr {
+            validator::Expression::FunctionApplication(_) => {
+                let eval_idx = self
+                    .functions
+                    .function_index("eval")
+                    .ok_or("Function eval not found in the function table")?;
+                let local_idx = self.generate_instructions_for_expr(&[], expr, locals, instrs)?;
+                instrs.push(Instruction::LocalGet(local_idx));
+                instrs.push(Instruction::Call(eval_idx));
+                instrs.push(Instruction::End);
+                Ok(())
+            }
+            validator::Expression::LambdaAbstraction(_, _) => {
+                Err("Main function can't be a lambda abstraction".to_string())
+            }
+            _ => todo!(),
+        }
+    }
+
     fn generate_instructions_from_top_level_expr(
-        &self,
+        &mut self,
         expr: &validator::Expression,
         locals: &mut Vec<ValType>,
         instrs: &mut Vec<Instruction>,
     ) -> Result<(), String> {
         match expr {
             validator::Expression::LambdaAbstraction(syms, body) => {
-                self.generate_instructions_for_lambda_body(syms, body, locals, instrs)?;
+                let local_idx = self.generate_instructions_for_expr(syms, body, locals, instrs)?;
+                instrs.push(Instruction::LocalGet(local_idx));
                 instrs.push(Instruction::End);
             }
             _ => todo!(),
@@ -300,13 +239,13 @@ impl CodeGen {
         Ok(())
     }
 
-    fn generate_instructions_for_lambda_body(
-        &self,
+    fn generate_instructions_for_expr(
+        &mut self,
         syms: &[String],
         expr: &validator::Expression,
         locals: &mut Vec<ValType>,
         instrs: &mut Vec<Instruction>,
-    ) -> Result<(), String> {
+    ) -> Result<u32, String> {
         match expr {
             validator::Expression::FunctionApplication(params) => {
                 let func = &params[0];
@@ -316,8 +255,9 @@ impl CodeGen {
                     validator::Expression::Symbol(sym) => {
                         let name = &(**sym).borrow().name;
                         // TODO: check if the function is already generated instead of unwrap
-                        let func_tbl_idx = self.function_indices.get(name).unwrap().table_index;
-                        func_tbl_idx
+                        self.functions
+                            .table_index(name)
+                            .ok_or(format!("Function {} not found in the function table", name))?
                     }
                     _ => todo!(),
                 };
@@ -326,10 +266,9 @@ impl CodeGen {
                 let local_idx = locals.len() - 1 + (syms.len());
 
                 let make_env_idx = self
-                    .function_indices
-                    .get("make_env")
-                    .unwrap()
-                    .function_index;
+                    .functions
+                    .function_index("make_env")
+                    .ok_or("Function make_env not found in the function table")?;
                 instrs.push(Instruction::I32Const(num_params as i32));
                 instrs.push(Instruction::I32Const(func_tbl_idx as i32));
                 instrs.push(Instruction::Call(make_env_idx));
@@ -357,10 +296,9 @@ impl CodeGen {
                         }
                         validator::Expression::IntLiteral(val) => {
                             let make_val_idx = self
-                                .function_indices
-                                .get("make_val")
-                                .unwrap()
-                                .function_index;
+                                .functions
+                                .function_index("make_val")
+                                .ok_or("Function make_val not found in the function table")?;
                             instrs.push(Instruction::LocalGet(local_idx as u32));
                             instrs.push(Instruction::I32Const(*val as i32));
                             instrs.push(Instruction::Call(make_val_idx));
@@ -375,18 +313,18 @@ impl CodeGen {
                 }
 
                 let make_closure_idx = self
-                    .function_indices
-                    .get("make_closure")
-                    .unwrap()
-                    .function_index;
+                    .functions
+                    .function_index("make_closure")
+                    .ok_or("Function make_closure not found in the function table")?;
                 instrs.push(Instruction::I32Const(num_params as i32));
                 instrs.push(Instruction::LocalGet(local_idx as u32));
                 instrs.push(Instruction::Call(make_closure_idx));
+                instrs.push(Instruction::LocalSet(local_idx as u32));
+
+                Ok(local_idx as u32)
             }
             _ => todo!(),
         }
-
-        Ok(())
     }
 
     fn validator_type_to_val_type(&self, ty: &validator::Type) -> Option<ValType> {
@@ -398,7 +336,21 @@ impl CodeGen {
     }
 }
 
-pub fn generate(symbol_table: validator::SymbolTable) -> Result<Vec<u8>, String> {
+pub fn generate_code(mut symbol_table: validator::SymbolTable) -> Result<Vec<u8>, String> {
+    let square = symbol_table.get("square").unwrap();
+    symbol_table.insert(
+        "main".to_string(),
+        Rc::new(RefCell::new(validator::Symbol {
+            name: "main".to_string(),
+            ty: validator::Type::Int,
+            expr: Some(validator::Expression::FunctionApplication(vec![
+                validator::Expression::Symbol(square.clone()),
+                validator::Expression::IntLiteral(4),
+            ])),
+            scope: None,
+        })),
+    );
+
     let code_gen = CodeGen::new(symbol_table);
 
     code_gen.generate()
