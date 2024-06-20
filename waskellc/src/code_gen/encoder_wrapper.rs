@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::collections::hash_map::{self, HashMap};
 
 use wasm_encoder::*;

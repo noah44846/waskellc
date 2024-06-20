@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: MIT
 
-//! Code gen module is responsible for generating the Wasm code from the AST of the Waskell
-//! programming language.
-
 use std::{cell::RefCell, rc::Rc};
 
 use wasm_encoder::*;
