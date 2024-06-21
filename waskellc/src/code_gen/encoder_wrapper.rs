@@ -5,7 +5,7 @@ use std::collections::hash_map::{self, HashMap};
 use wasm_encoder::*;
 
 pub struct DeclaredWasmFunctionTypes {
-    map: HashMap<Vec<ValType>, EntityType>,
+    map: HashMap<Vec<ValType>, u32>,
     type_section: TypeSection,
 }
 
@@ -17,7 +17,7 @@ impl DeclaredWasmFunctionTypes {
         }
     }
 
-    pub fn function_type(&mut self, tys: Vec<ValType>) -> Option<EntityType> {
+    pub fn function_type(&mut self, tys: Vec<ValType>) -> Option<u32> {
         if tys.is_empty() {
             return None;
         }
@@ -25,7 +25,7 @@ impl DeclaredWasmFunctionTypes {
         if let hash_map::Entry::Vacant(e) = self.map.entry(tys.clone()) {
             self.type_section
                 .function(Vec::from(&tys[..tys.len() - 1]), vec![*tys.last().unwrap()]);
-            let val = EntityType::Function(self.type_section.len() - 1);
+            let val = self.type_section.len() - 1;
             e.insert(val);
             return Some(val);
         }
@@ -55,30 +55,39 @@ pub struct DeclaredWasmFunctions {
 }
 
 impl DeclaredWasmFunctions {
-    pub fn new(mut import_section: ImportSection, imports: &[(&str, &str, EntityType)]) -> Self {
-        let mut map = HashMap::new();
+    pub fn new(
+        import_section: ImportSection,
+        imports: &[(&str, &str, u32)],
+        apply_func_ty_idx: u32,
+    ) -> Self {
+        let mut res = DeclaredWasmFunctions {
+            map: HashMap::new(),
+            current_function_index: 0,
+            table_functions_list: vec![],
+            import_section,
+            function_section: FunctionSection::new(),
+            export_section: ExportSection::new(),
+        };
 
-        let import_len = import_section.len();
+        let import_len = res.import_section.len();
         for (module, name, ty) in imports {
-            import_section.import(module, name, *ty);
-            map.insert(
+            res.import_section
+                .import(module, name, EntityType::Function(*ty));
+            res.map.insert(
                 name.to_string(),
                 DeclaredWasmFunctionIndices {
-                    function_index: import_section.len() - import_len - 1,
+                    function_index: res.import_section.len() - import_len - 1,
                     table_index: None,
                     is_exported: false,
                 },
             );
         }
+        res.current_function_index = res.import_section.len() - import_len;
 
-        DeclaredWasmFunctions {
-            map,
-            current_function_index: import_section.len() - import_len,
-            table_functions_list: vec![],
-            import_section,
-            function_section: FunctionSection::new(),
-            export_section: ExportSection::new(),
-        }
+        res.add_function("apply", apply_func_ty_idx).unwrap();
+        res.table_index("apply").unwrap();
+
+        res
     }
 
     pub fn exists(&self, name: &str) -> bool {

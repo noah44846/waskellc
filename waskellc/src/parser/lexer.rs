@@ -6,6 +6,7 @@ use logos::{Lexer, Logos};
 
 /// A lexer for the Waskell programming language.
 #[derive(Logos, Debug, Clone, PartialEq)]
+#[logos(error = String)]
 #[logos(skip r"\s+")]
 pub enum Token {
     // any string that starts with a lowercase letter or _ and is followed by any word character (a-z, A-Z, 0-9, _) or '
@@ -40,14 +41,17 @@ pub enum Token {
     #[regex(r"\d+", |lex| lex.slice().parse::<i64>().unwrap())]
     Integer(i64),
 
-    // TODO: floating point numbers
-    // TODO: escape sequences
-    // TODO: layout rule
     #[regex(r#"'.*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
     Char(char),
 
     #[regex(r#""[^"]*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_owned())]
     String(String),
+
+    #[regex(r"--[^\n]*", logos::skip)]
+    LineComment,
+
+    #[regex(r"\{-[^-}]*-}", logos::skip)]
+    BlockComment,
 }
 
 pub type TokenIter<'a> = Peekable<Lexer<'a, Token>>;

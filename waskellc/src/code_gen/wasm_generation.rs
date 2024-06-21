@@ -27,8 +27,6 @@ impl CodeGen {
             .function_type(vec![ValType::I32, ValType::I32, ValType::I32])
             .unwrap();
 
-        // TODO: implement fn_app
-
         // TODO: memory size ??
         import_section.import(
             "lib",
@@ -55,14 +53,19 @@ impl CodeGen {
                 ("lib", "*", arg_2_int32_ret_int32),
                 ("lib", "/", arg_2_int32_ret_int32),
             ],
+            arg_2_int32_ret_int32,
         );
 
-        CodeGen {
+        let mut res = CodeGen {
             code_section: CodeSection::new(),
             function_types,
             functions,
             symbol_table: Rc::new(symbol_table),
-        }
+        };
+
+        res.generate_apply_function().unwrap();
+
+        res
     }
 
     fn generate(mut self) -> Result<Vec<u8>, String> {
@@ -127,17 +130,13 @@ impl CodeGen {
         }
 
         let func_type = self.function_types.function_type(params).unwrap();
-        if let EntityType::Function(type_index) = func_type {
-            self.functions
-                .add_function(&symbol_ref.name, type_index)
-                .ok_or(format!(
-                    "Function {} already exists in the function table",
-                    symbol_ref.name
-                ))?;
-            self.functions.export(&symbol_ref.name).unwrap();
-        } else {
-            unreachable!();
-        }
+        self.functions
+            .add_function(&symbol_ref.name, func_type)
+            .ok_or(format!(
+                "Function {} already exists in the function table",
+                symbol_ref.name
+            ))?;
+        self.functions.export(&symbol_ref.name).unwrap();
 
         Ok(())
     }
@@ -294,7 +293,18 @@ impl CodeGen {
                             instrs.push(Instruction::I32Const(*val as i32));
                             instrs.push(Instruction::Call(make_val_idx));
                             instrs.push(Instruction::I32Store(MemArg {
-                                align: 0,
+                                align: 2,
+                                offset: ((i + 1) * 4) as u64,
+                                memory_index: 0,
+                            }));
+                        }
+                        validator::Expression::FunctionApplication(_) => {
+                            let fn_local_idx =
+                                self.generate_instructions_for_expr(syms, param, locals, instrs)?;
+                            instrs.push(Instruction::LocalGet(local_idx as u32));
+                            instrs.push(Instruction::LocalGet(fn_local_idx));
+                            instrs.push(Instruction::I32Store(MemArg {
+                                align: 2,
                                 offset: ((i + 1) * 4) as u64,
                                 memory_index: 0,
                             }));
@@ -325,23 +335,102 @@ impl CodeGen {
             _ => todo!(),
         }
     }
+
+    fn generate_apply_function(&mut self) -> Result<(), String> {
+        // TODO: remove fn_app and value form element in wat file since they never get called indirectly
+
+        fn max_application_in_expr(expr: &validator::Expression) -> u32 {
+            match expr {
+                validator::Expression::FunctionApplication(params) => {
+                    let mut current_max = (params.len() - 1) as u32;
+                    for param in params {
+                        current_max = current_max.max(max_application_in_expr(param));
+                    }
+                    current_max
+                }
+                _ => 0,
+            }
+        }
+
+        let max_application = self
+            .symbol_table
+            .clone()
+            .iter()
+            .map(|(_, s)| {
+                let s = s.borrow();
+                match &s.ty {
+                    validator::Type::Function(params) => {
+                        let mut current_max = (params.len() - 1) as u32;
+                        if let Some(expr) = &s.expr {
+                            current_max = current_max.max(max_application_in_expr(expr));
+                        }
+                        current_max
+                    }
+                    _ => 0,
+                }
+            })
+            .max()
+            .unwrap();
+
+        self.functions
+            .function_index("apply")
+            .expect("Function apply not found");
+        let apply_table_idx = self
+            .functions
+            .table_index("apply")
+            .expect("Function apply not found");
+        assert!(
+            apply_table_idx == 0,
+            "apply function must be the first function in the table"
+        );
+
+        let mut instrs = vec![];
+        for i in 0..=max_application {
+            let ty_idx = self
+                .function_types
+                .function_type(vec![ValType::I32; (i + 1) as usize])
+                .unwrap();
+
+            instrs.push(Instruction::LocalGet(0));
+            instrs.push(Instruction::I32Const(i as i32));
+            instrs.push(Instruction::I32Eq);
+            instrs.push(Instruction::If(BlockType::Empty));
+            for j in 0..i {
+                instrs.push(Instruction::LocalGet(1));
+                instrs.push(Instruction::I32Load(MemArg {
+                    align: 2,
+                    offset: (4 * (j + 1)) as u64,
+                    memory_index: 0,
+                }));
+            }
+            instrs.push(Instruction::LocalGet(1));
+            instrs.push(Instruction::I32Load(MemArg {
+                align: 2,
+                offset: 0,
+                memory_index: 0,
+            }));
+            instrs.push(Instruction::CallIndirect {
+                ty: ty_idx,
+                table: 0,
+            });
+            instrs.push(Instruction::Return);
+            instrs.push(Instruction::End);
+        }
+
+        instrs.push(Instruction::Unreachable);
+        instrs.push(Instruction::End);
+
+        let mut f = Function::new(vec![]);
+        instrs.iter().for_each(|instr| {
+            f.instruction(instr);
+        });
+
+        self.code_section.function(&f);
+        Ok(())
+    }
 }
 
-pub fn generate_code(mut symbol_table: validator::SymbolTable) -> Result<Vec<u8>, String> {
-    let square = symbol_table.get("square").unwrap();
-    symbol_table.insert(
-        "main".to_string(),
-        Rc::new(RefCell::new(validator::Symbol {
-            name: "main".to_string(),
-            ty: validator::Type::Int,
-            expr: Some(validator::Expression::FunctionApplication(vec![
-                validator::Expression::Symbol(square.clone()),
-                validator::Expression::IntLiteral(4),
-            ])),
-            scope: None,
-        })),
-    );
-
+pub fn generate_code(symbol_table: validator::SymbolTable) -> Result<Vec<u8>, String> {
     let code_gen = CodeGen::new(symbol_table);
 
     code_gen.generate()

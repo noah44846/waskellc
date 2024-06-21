@@ -617,13 +617,17 @@ The context-free syntax of Waskell is a subset of Haskell (defined in report @ha
 
 === Language features
 
-//Skipped features:
+//Skipped features (compare to spec):
 
 //- irrefutable patterns + pattern bindings
 //- typed expressions
 //- holes
 //- operator stuff ?? (precedence, associativity, fixity, arity > 2 operators / paren func def thing)
   //- "(a &\* b) c = ..."
+//- Floats
+//- string escaping
+//- No sections (e.g. (1 +) or (+ 1))
+//- labeled fields in records
 
 In short the subset of Haskell that is used in Waskell is the following:
 - Let bindings (and where bindings)

@@ -1,2 +1,5 @@
-square :: Int -> Int
-square x = x * x
+square :: Int -> Int;
+square x = x * x;
+
+main :: Int;
+main = square (square (square 5))

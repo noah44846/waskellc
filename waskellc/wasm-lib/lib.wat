@@ -6,31 +6,9 @@
   (type $ap1 (func (param i32) (result i32)))
   (type $ap2 (func (param i32 i32) (result i32)))
   (table (export "table") 128 funcref)
-  (elem (i32.const 0) $fn_app $value)
+  (elem (i32.const 0) $dummy) ;; will be overwritten be the merge
 
-  (func $fn_app (param $n i32) (param $ptr i32) (result i32)
-    (if
-      (i32.eq (i32.const 2) (local.get $n))
-      (then
-        (return (call_indirect (type $ap2)
-          (i32.load offset=4 (local.get $ptr))
-          (i32.load offset=8 (local.get $ptr))
-          (i32.load (local.get $ptr)))))
-      (else
-        (if
-          (i32.eq (i32.const 1) (local.get $n))
-          (then
-            (return (call_indirect (type $ap1)
-              (i32.load offset=4 (local.get $ptr))
-              (i32.load (local.get $ptr)))))
-          (else
-            (if
-              (i32.eq (i32.const 0) (local.get $n))
-              (then
-                (return (call_indirect (type $ap0)
-                  (i32.load (local.get $ptr)))))
-              (else
-                (unreachable)))))))
+  (func $dummy (param i32 i32) (result i32)
     (unreachable)
   )
 
@@ -91,7 +69,7 @@
 
   (func $div (export "/") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
-      (i32.div_u
+      (i32.div_s
         (call $eval (local.get $x))
         (call $eval (local.get $y)))))
   )
@@ -112,9 +90,10 @@
             (i32.load offset=1 (local.get $ptr)))))
         (else
           (local.set $ptr
-            (call $fn_app
+            (call_indirect (type $ap2)
               (i32.load offset=1 (local.get $ptr))
-              (i32.load offset=5 (local.get $ptr))))
+              (i32.load offset=5 (local.get $ptr))
+              (i32.const 0)))
           (br $loop))))
 
     (unreachable)

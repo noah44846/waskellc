@@ -157,18 +157,19 @@ fn parser_lhs_expr_to_expr(
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match lhs_expr {
-        parser::LeftHandSideExpression::FunctionApplication(params) => {
+        parser::LeftHandSideExpression::FunctionApplication(mut params) => {
             if params.is_empty() {
                 return Err("Function application must have at least one parameter".to_string());
             }
 
             if params.len() == 1 {
-                return parser_fn_param_expr_to_expr(&params[0], context, symbol_table);
+                let param = params.remove(0);
+                return parser_fn_param_expr_to_expr(param, context, symbol_table);
             }
 
             let mut exprs = vec![];
             for param in params {
-                let expr = parser_fn_param_expr_to_expr(&param, context, symbol_table)?;
+                let expr = parser_fn_param_expr_to_expr(param, context, symbol_table)?;
                 exprs.push(expr);
             }
 
@@ -178,13 +179,13 @@ fn parser_lhs_expr_to_expr(
 }
 
 fn parser_fn_param_expr_to_expr(
-    fn_arg_expr: &parser::FunctionParameterExpression,
+    fn_arg_expr: parser::FunctionParameterExpression,
     context: &Symbol,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match fn_arg_expr {
         parser::FunctionParameterExpression::Variable(name) => {
-            if let Some(symbol) = symbol_table.get(name) {
+            if let Some(symbol) = symbol_table.get(&name) {
                 // if the symbol is in some scope, recursively check if it's in the same scope as the expr
                 // if there is no scope, then it is a global symbol
                 if let Some(scope) = &(**symbol).borrow().scope {
@@ -213,11 +214,14 @@ fn parser_fn_param_expr_to_expr(
                 Err(format!("Symbol {} not found", name))
             }
         }
-        parser::FunctionParameterExpression::IntegerLiteral(i) => Ok(Expression::IntLiteral(*i)),
+        parser::FunctionParameterExpression::ParenthesizedExpr(expr) => {
+            parser_expr_to_expr(*expr, context, symbol_table)
+        }
+        parser::FunctionParameterExpression::IntegerLiteral(i) => Ok(Expression::IntLiteral(i)),
         parser::FunctionParameterExpression::StringLiteral(s) => {
             Ok(Expression::StringLiteral(s.clone()))
         }
-        parser::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(*c)),
+        parser::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(c)),
     }
 }
 
@@ -258,6 +262,10 @@ fn add_function_decl_to_symbol(
 
     let expr = parser_expr_to_expr(rhs, &(*symbol).borrow(), symbol_table)?;
     let mut symbol_ref = (*symbol).borrow_mut();
+    if sym_params.is_empty() {
+        symbol_ref.expr = Some(expr);
+        return Ok(());
+    }
     symbol_ref.expr = Some(Expression::LambdaAbstraction(sym_params, Box::new(expr)));
     Ok(())
 }
