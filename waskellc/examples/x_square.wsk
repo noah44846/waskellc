@@ -1,5 +1,9 @@
-square :: Int -> Int;
+foreign export wasm square :: Int -> Int;
 square x = x * x;
 
-main :: Int;
-main = square (square (square 5))
+foreign import wasm print :: Int -> ();
+
+--main :: Int;
+--main = square (square (square 5))
+main :: ();
+main = print (square (square (square 5)))

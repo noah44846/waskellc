@@ -2,10 +2,10 @@
 
 //! This module contains the parser and lexer for the Waskell programming language.
 
-mod ast_gen;
 mod lexer;
+mod parser;
 
-pub use ast_gen::{
+pub use parser::{
     parse, Expression, FunctionDeclaration, FunctionParameterExpression, FunctionParameterPattern,
     FunctionType, LeftHandSideExpression, TopDeclaration, TopDeclarations, Type,
     TypeApplicationElement,

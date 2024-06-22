@@ -4,8 +4,8 @@
 
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
-use crate::parser;
-use crate::validator::type_check::type_check_expr;
+use crate::ast_gen;
+use crate::validator::type_check::type_check_sym;
 
 pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
 
@@ -15,14 +15,21 @@ pub struct Symbol {
     pub ty: Type,
     pub expr: Option<Expression>,
     pub scope: Option<Rc<RefCell<Symbol>>>,
+    pub is_exported: bool,
+    pub import_module_name: Option<&'static str>,
 }
 
 impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Symbol {{ name: {}, ty: {:?}, expr: {:#?} }}",
-            self.name, self.ty, self.expr
+            "Symbol {{ name: {}, ty: {:?}, expr: {:#?}, scope: {:?}, is_exported: {}, is_imported: {:?} }}",
+            self.name,
+            self.ty,
+            self.expr,
+            self.scope.as_ref().map(|s| s.borrow().name.clone()),
+            self.is_exported,
+            self.import_module_name,
         )
     }
 }
@@ -77,11 +84,11 @@ pub enum Expression {
     // case expression...
 }
 
-fn parser_type_to_type(parser_type: parser::Type) -> Result<Type, String> {
+fn parser_type_to_type(parser_type: ast_gen::Type) -> Result<Type, String> {
     // TODO: add support for type applications
     for ty in &parser_type.0 {
         match ty {
-            parser::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
+            ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
                 "Int" => return Ok(Type::Int),
                 "Float" => return Ok(Type::Float),
                 "Boolean" => return Ok(Type::Boolean),
@@ -89,6 +96,7 @@ fn parser_type_to_type(parser_type: parser::Type) -> Result<Type, String> {
                 "String" => return Ok(Type::String),
                 _ => todo!(),
             },
+            ast_gen::TypeApplicationElement::Unit => return Ok(Type::Unit),
         }
     }
     Err("No type found".to_string())
@@ -96,7 +104,9 @@ fn parser_type_to_type(parser_type: parser::Type) -> Result<Type, String> {
 
 fn function_type_to_symbol(
     name: String,
-    func_ty: parser::FunctionType,
+    func_ty: ast_gen::FunctionType,
+    is_exported: bool,
+    is_imported: bool,
     symbol_table: &mut SymbolTable,
 ) -> Result<(), String> {
     let tys = func_ty
@@ -112,18 +122,20 @@ fn function_type_to_symbol(
             ty: Type::Function(tys),
             expr: None,
             scope: None,
+            is_exported,
+            import_module_name: if is_imported { Some("foreign") } else { None },
         })),
     );
     Ok(())
 }
 
 fn parser_expr_to_expr(
-    parser_expr: parser::Expression,
+    parser_expr: ast_gen::Expression,
     context: &Symbol,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match parser_expr {
-        parser::Expression::InfixedApplication(lhs, op, rhs) => {
+        ast_gen::Expression::InfixedApplication(lhs, op, rhs) => {
             let lhs_expr = parser_lhs_expr_to_expr(*lhs, context, symbol_table)?;
             let rhs_expr = parser_expr_to_expr(*rhs, context, symbol_table)?;
             let op = symbol_table
@@ -135,7 +147,7 @@ fn parser_expr_to_expr(
                 rhs_expr,
             ]))
         }
-        parser::Expression::NegatedExpr(expr) => {
+        ast_gen::Expression::NegatedExpr(expr) => {
             let expr = parser_expr_to_expr(*expr, context, symbol_table)?;
             let negate = symbol_table
                 .get("negate")
@@ -145,19 +157,19 @@ fn parser_expr_to_expr(
                 expr,
             ]))
         }
-        parser::Expression::LeftHandSideExpression(lhs) => {
+        ast_gen::Expression::LeftHandSideExpression(lhs) => {
             parser_lhs_expr_to_expr(*lhs, context, symbol_table)
         }
     }
 }
 
 fn parser_lhs_expr_to_expr(
-    lhs_expr: parser::LeftHandSideExpression,
+    lhs_expr: ast_gen::LeftHandSideExpression,
     context: &Symbol,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match lhs_expr {
-        parser::LeftHandSideExpression::FunctionApplication(mut params) => {
+        ast_gen::LeftHandSideExpression::FunctionApplication(mut params) => {
             if params.is_empty() {
                 return Err("Function application must have at least one parameter".to_string());
             }
@@ -179,12 +191,12 @@ fn parser_lhs_expr_to_expr(
 }
 
 fn parser_fn_param_expr_to_expr(
-    fn_arg_expr: parser::FunctionParameterExpression,
+    fn_arg_expr: ast_gen::FunctionParameterExpression,
     context: &Symbol,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match fn_arg_expr {
-        parser::FunctionParameterExpression::Variable(name) => {
+        ast_gen::FunctionParameterExpression::Variable(name) => {
             if let Some(symbol) = symbol_table.get(&name) {
                 // if the symbol is in some scope, recursively check if it's in the same scope as the expr
                 // if there is no scope, then it is a global symbol
@@ -214,22 +226,23 @@ fn parser_fn_param_expr_to_expr(
                 Err(format!("Symbol {} not found", name))
             }
         }
-        parser::FunctionParameterExpression::ParenthesizedExpr(expr) => {
+        ast_gen::FunctionParameterExpression::ParenthesizedExpr(expr) => {
             parser_expr_to_expr(*expr, context, symbol_table)
         }
-        parser::FunctionParameterExpression::IntegerLiteral(i) => Ok(Expression::IntLiteral(i)),
-        parser::FunctionParameterExpression::StringLiteral(s) => {
+        ast_gen::FunctionParameterExpression::IntegerLiteral(i) => Ok(Expression::IntLiteral(i)),
+        ast_gen::FunctionParameterExpression::StringLiteral(s) => {
             Ok(Expression::StringLiteral(s.clone()))
         }
-        parser::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(c)),
+        ast_gen::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(c)),
+        ast_gen::FunctionParameterExpression::Unit => todo!(),
     }
 }
 
 fn add_function_decl_to_symbol(
-    func_decl: parser::FunctionDeclaration,
+    func_decl: ast_gen::FunctionDeclaration,
     symbol_table: &mut SymbolTable,
 ) -> Result<(), String> {
-    let parser::FunctionDeclaration { name, lhs, rhs } = func_decl;
+    let ast_gen::FunctionDeclaration { name, lhs, rhs } = func_decl;
 
     let symbol = symbol_table
         .get(&name)
@@ -239,7 +252,7 @@ fn add_function_decl_to_symbol(
     let mut sym_params = vec![];
     for (i, param) in lhs.into_iter().enumerate() {
         match param {
-            parser::FunctionParameterPattern::AsPattern(name, None) => {
+            ast_gen::FunctionParameterPattern::AsPattern(name, None) => {
                 let symbol_ref = (*symbol).borrow();
                 let ty = symbol_ref
                     .param_type(i)
@@ -252,6 +265,8 @@ fn add_function_decl_to_symbol(
                         ty: ty.clone(),
                         expr: None,
                         scope: Some(symbol.clone()),
+                        is_exported: false,
+                        import_module_name: None,
                     })),
                 );
                 sym_params.push(name);
@@ -270,7 +285,7 @@ fn add_function_decl_to_symbol(
     Ok(())
 }
 
-pub fn validate(ast: parser::TopDeclarations) -> Result<SymbolTable, String> {
+pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
     let mut symbol_table: SymbolTable = HashMap::new();
 
     // TODO: replace this with a std lib
@@ -280,30 +295,40 @@ pub fn validate(ast: parser::TopDeclarations) -> Result<SymbolTable, String> {
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
             scope: None,
+            is_exported: false,
+            import_module_name: Some("lib"),
         },
         Symbol {
             name: "-".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
             scope: None,
+            is_exported: false,
+            import_module_name: Some("lib"),
         },
         Symbol {
             name: "*".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
             scope: None,
+            is_exported: false,
+            import_module_name: Some("lib"),
         },
         Symbol {
             name: "/".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
             scope: None,
+            is_exported: false,
+            import_module_name: Some("lib"),
         },
         Symbol {
             name: "negate".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int]),
             expr: None,
             scope: None,
+            is_exported: false,
+            import_module_name: Some("lib"),
         },
     ];
 
@@ -313,17 +338,21 @@ pub fn validate(ast: parser::TopDeclarations) -> Result<SymbolTable, String> {
 
     for decl in ast.0 {
         match decl {
-            parser::TopDeclaration::TypeSig(name, ty) => {
-                function_type_to_symbol(name, ty, &mut symbol_table)?;
+            ast_gen::TopDeclaration::TypeSig {
+                name,
+                ty,
+                is_exported,
+                is_imported,
+                ..
+            } => {
+                let is_exported = if name == "main" { true } else { is_exported };
+                function_type_to_symbol(name, ty, is_exported, is_imported, &mut symbol_table)?;
             }
-            parser::TopDeclaration::FunctionDecl(func_decl) => {
+            ast_gen::TopDeclaration::FunctionDecl(func_decl) => {
                 let name = func_decl.name.clone();
                 add_function_decl_to_symbol(func_decl, &mut symbol_table)?;
                 let symbol = symbol_table.get(&name).unwrap();
-                type_check_expr(
-                    &(*symbol).borrow().expr.as_ref().unwrap().clone(),
-                    &(symbol).borrow(),
-                )?;
+                type_check_sym(&symbol.borrow())?;
             }
         }
     }

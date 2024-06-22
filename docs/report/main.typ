@@ -832,6 +832,12 @@ The standard library of the functional language is a subset of the Haskell stand
 
 = Implementation
 
+// Challenges
+// - Implementing layout in the lexer difficult since I use a library that does not support it
+// - apply function generation because the type of the function being called indirectly is not known
+// - wasm_encode crate relies on order of functions in the module to be correct and that is a challenge to maintain
+// - merge the wasm-lib
+
 = Evaluation
 
 = Conclusion

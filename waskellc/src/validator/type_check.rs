@@ -1,8 +1,50 @@
 // SPDX-License-Identifier: MIT
 
+use std::slice;
+
 use crate::validator::symbol_check::*;
 
-pub fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, String> {
+pub fn type_check_sym(symbol: &Symbol) -> Result<(), String> {
+    if let Some(value) = &symbol.expr {
+        let ty = type_check_expr(value, symbol)?;
+
+        let tys: &[_] = if let Type::Function(ref tys) = ty {
+            tys
+        } else {
+            slice::from_ref(&ty)
+        };
+
+        if symbol.is_exported && !tys.iter().all(can_type_be_exported) {
+            return Err(format!(
+                "Symbol {} has type {:?} which can't be exported",
+                symbol.name, symbol.ty
+            ));
+        }
+
+        let sym_tys: &[_] = if let Type::Function(tys) = &symbol.ty {
+            tys
+        } else {
+            unreachable!()
+        };
+
+        if sym_tys != tys {
+            return Err(format!(
+                "Symbol {} has type {:?} but expression has type {:?}",
+                symbol.name, symbol.ty, ty
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn can_type_be_exported(ty: &Type) -> bool {
+    match ty {
+        Type::Function(_) => false,
+        _ => true,
+    }
+}
+
+fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, String> {
     match expr {
         Expression::IntLiteral(_) => Ok(Type::Int),
         Expression::FloatLiteral(_) => Ok(Type::Float),
@@ -62,10 +104,9 @@ pub fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, Stri
                 return Err("Lambda expression has wrong arity".to_string());
             }
 
-            #[allow(clippy::single_match)]
             match expr_ty {
-                Type::Function(ref params) => match &context.ty {
-                    Type::Function(ctx_params) => {
+                Type::Function(ref params) => {
+                    if let Type::Function(ctx_params) = &context.ty {
                         // drop the first n params (n = arity)
                         let ctx_params = ctx_params.iter().skip(params.len()).collect::<Vec<_>>();
 
@@ -83,9 +124,12 @@ pub fn type_check_expr(expr: &Expression, context: &Symbol) -> Result<Type, Stri
                                 );
                             }
                         }
+                    } else {
+                        return Err(
+                            "Symbol containing lambda expression is not a function".to_string()
+                        );
                     }
-                    _ => (),
-                },
+                }
                 Type::List(_) => {
                     todo!()
                 }

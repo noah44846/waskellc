@@ -14,7 +14,8 @@ use wasmtime::*;
 //mod linking;
 //mod ref_types;
 //mod tail_call;
-mod code_gen;
+//mod code_gen;
+mod usage_example;
 
 fn main() -> Result<()> {
     //memory::memory_main()
@@ -23,5 +24,6 @@ fn main() -> Result<()> {
     //linking::linking_main()
     //ref_types::ref_types_main()
     //tail_call::tail_call_main()
-    code_gen::code_gen_main()
+    //code_gen::code_gen_main()
+    usage_example::usage_example_main()
 }

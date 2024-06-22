@@ -2,7 +2,7 @@
 
 use logos::Logos;
 
-use crate::parser::lexer::{Token, TokenIter};
+use crate::ast_gen::lexer::{Token, TokenIter};
 
 fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
     let next = if peek {
@@ -19,7 +19,6 @@ fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct TopDeclarations(pub Vec<TopDeclaration>);
 
@@ -54,42 +53,114 @@ pub enum TopDeclaration {
     //NewTypeDecl(NewTypeDeclaration),
     //FixityDecl(FixityDeclaration),
     // may be a list of type variables
-    TypeSig(String, FunctionType),
+    TypeSig {
+        name: String,
+        ty: FunctionType,
+        is_exported: bool,
+        is_imported: bool,
+    },
     FunctionDecl(FunctionDeclaration),
 }
 
 impl TopDeclaration {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
-        let token = next_token(input, false)?;
+        let token = next_token(input, true)?;
         match token {
             Token::ReservedIdent(ident) => match ident.as_str() {
                 "type" => {
                     unimplemented!()
                 }
                 "data" => {
-                    unimplemented!()
+                    todo!()
                 }
                 "newtype" => {
                     unimplemented!()
                 }
+                "foreign" => {
+                    input.next(); // consume the 'foreign'
+                    let next = next_token(input, false)?;
+                    let error = Err(format!(
+                        "Expected import or export after foreign but got: {:?}",
+                        next
+                    ));
+                    let ident = if let Token::VariableIdent(ident) = next {
+                        if ident != "export" {
+                            return error;
+                        }
+                        ident
+                    } else if let Token::ReservedIdent(ident) = next {
+                        if ident != "import" {
+                            return error;
+                        }
+                        ident
+                    } else {
+                        return error;
+                    };
+
+                    let next = next_token(input, false)?;
+                    if ident != "import" && ident != "export" {
+                        return Err(format!(
+                            "Expected import or export after foreign but got: {}",
+                            ident
+                        ));
+                    }
+
+                    if let Token::VariableIdent(call_conv) = next {
+                        if call_conv != "wasm" {
+                            return Err(format!(
+                                "Unsupported export call convention: {}",
+                                call_conv
+                            ));
+                        }
+
+                        let mut ty_sig = TopDeclaration::parse_type_sig_or_decl(input, true)?;
+                        if let TopDeclaration::TypeSig {
+                            ref mut is_exported,
+                            ref mut is_imported,
+                            ..
+                        } = ty_sig
+                        {
+                            *is_exported = ident == "export";
+                            *is_imported = ident == "import";
+                            return Ok(ty_sig);
+                        }
+                        unreachable!()
+                    }
+
+                    return Err(format!(
+                        "Expected export call convention after export but got: {:?}",
+                        next
+                    ));
+                }
                 _ => Err(format!("Unexpected keyword: {}", ident)),
             },
+            _ => TopDeclaration::parse_type_sig_or_decl(input, false),
+        }
+    }
+
+    fn parse_type_sig_or_decl(input: &mut TokenIter, from_foreign: bool) -> Result<Self, String> {
+        match next_token(input, false)? {
             // TODO: support (&*) as variables
             Token::VariableIdent(ident) => match next_token(input, true)? {
                 Token::ReservedOperator(op) if op == "::" => {
                     input.next(); // consume the '::'
-                    Ok(TopDeclaration::TypeSig(ident, FunctionType::parse(input)?))
+                    Ok(TopDeclaration::TypeSig {
+                        name: ident,
+                        ty: FunctionType::parse(input)?,
+                        is_exported: false,
+                        is_imported: false,
+                    })
                 }
-                _ => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(
+                _ if !from_foreign => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(
                     ident, input,
                 )?)),
+                _ => Err("Expected type signature after foreign declaration".to_string()),
             },
-            _ => Err(format!("Unexpected token for top declaration: {:?}", token)),
+            t => Err(format!("Unexpected token for top declaration: {:?}", t)),
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct FunctionType(pub Vec<Type>);
 
@@ -113,7 +184,6 @@ impl FunctionType {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Type(pub Vec<TypeApplicationElement>);
 
@@ -124,6 +194,14 @@ impl Type {
                 let elements = vec![TypeApplicationElement::TypeConstructor(ident)];
                 Ok(Type(elements))
             }
+            Token::Special('(') => {
+                if let Token::Special(')') = next_token(input, true)? {
+                    input.next(); // consume the ')'
+                    return Ok(Type(vec![TypeApplicationElement::Unit]));
+                }
+                // TODO: parse tuple types or parenthesized types
+                todo!()
+            }
             t => Err(format!("Expected type constructor, got {:?}", t)),
         }
     }
@@ -131,7 +209,7 @@ impl Type {
 
 #[derive(Debug)]
 pub enum TypeApplicationElement {
-    //Unit,
+    Unit,
     //ListConstructor,
     //TupleConstructor(i32),
     //FunctionConstructor,
@@ -359,6 +437,7 @@ pub enum FunctionParameterExpression {
     //Constructor(String),
     //EmptyList,
     //EmptyTuple(i32),
+    Unit,
     ParenthesizedExpr(Box<Expression>),
     //TupleExpr(Vec<Expression>),
     //ListExpr(Vec<Expression>),
