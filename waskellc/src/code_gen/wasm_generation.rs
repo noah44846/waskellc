@@ -40,11 +40,11 @@ impl CodeGen {
 
         let arg_1_int32_ret_int32 = self
             .function_types
-            .function_type(vec![ValType::I32], Some(ValType::I32))
+            .function_type_idx(vec![ValType::I32], Some(ValType::I32))
             .unwrap();
         let arg_2_int32_ret_int32 = self
             .function_types
-            .function_type(vec![ValType::I32, ValType::I32], Some(ValType::I32))
+            .function_type_idx(vec![ValType::I32, ValType::I32], Some(ValType::I32))
             .unwrap();
 
         // TODO: memory size ??
@@ -78,7 +78,7 @@ impl CodeGen {
             .values()
             .filter(|s| {
                 let s = (***s).borrow();
-                s.scope.is_none() && s.import_module_name.is_some()
+                s.import_module_name.is_some()
             })
             .map(|s| {
                 let symbol_ref = (**s).borrow();
@@ -92,16 +92,14 @@ impl CodeGen {
             .collect::<Result<Vec<_>, String>>()?;
 
         let imports = self.imports.take().unwrap();
-        self.functions = Some(imports.to_functions(arg_2_int32_ret_int32));
-
-        self.generate_apply_function()?;
+        self.functions = Some(imports.into());
 
         self.symbol_table
             .clone()
             .values()
             .filter(|s| {
                 let s = (***s).borrow();
-                s.scope.is_none() && s.import_module_name == Some("foreign")
+                s.import_module_name == Some("foreign")
             })
             .map(|s| self.generate_foreign_import_wrapper(&(**s).borrow()))
             .collect::<Result<Vec<_>, String>>()?;
@@ -115,7 +113,7 @@ impl CodeGen {
             .values()
             .filter(|s| {
                 let s = (***s).borrow();
-                s.scope.is_none() && s.import_module_name.is_none()
+                s.import_module_name.is_none()
             })
             .map(|s| match self.create_signature(s) {
                 Ok(_) => Ok(s),
@@ -127,9 +125,11 @@ impl CodeGen {
             .map(|s| self.generate_function_body(s))
             .collect::<Result<Vec<_>, String>>()?;
 
+        let apply_func_idx = self.generate_apply_function()?;
+
         let type_section = self.function_types.type_section();
         let (import_section, function_section, export_section, element_section) =
-            self.functions.unwrap().finish();
+            self.functions.unwrap().finish(apply_func_idx);
 
         let mut module = Module::new();
         module
@@ -177,7 +177,7 @@ impl CodeGen {
 
         Ok(self
             .function_types
-            .function_type(params, return_ty)
+            .function_type_idx(params, return_ty)
             .unwrap())
     }
 
@@ -409,32 +409,33 @@ impl CodeGen {
         instrs: &mut Vec<Instruction>,
     ) -> Result<u32, String> {
         locals.push(ValType::I32);
-        let local_idx = locals.len() - 1 + (syms.len());
+        let local_idx = (locals.len() - 1) + syms.len();
+        let functions = self.functions.as_mut().unwrap();
 
         match expr {
             validator::Expression::FunctionApplication(params) => {
                 let func = &params[0];
                 let num_params = params.len() - 1;
 
-                let mut imported = false;
-                let func_tbl_idx = match func {
+                let (func_tbl_idx, func_ty_idx) = match func {
                     validator::Expression::Symbol(sym) => {
                         let sym_ref = (**sym).borrow();
 
                         let name = if let Some("foreign") = sym_ref.import_module_name {
-                            // TODO: fix this
-                            imported = true;
                             format!("imported_{}", &sym_ref.name)
                         } else {
                             sym_ref.name.clone()
                         };
-                        // TODO: check if the function is already generated instead of unwrap
-                        self.functions
-                            .as_mut()
-                            .unwrap()
+                        let tbl_idx = functions
                             .table_index(&name)
-                            .ok_or(format!("Function {} not found in the function table", name))?
+                            .ok_or(format!("Function {} not found in the function table", name))?;
+
+                        let ty_idx =
+                            self.func_ty_idx_from_symbol(&(**sym).borrow(), !sym_ref.is_exported)?;
+
+                        (tbl_idx, ty_idx)
                     }
+                    // TODO: function as value
                     _ => todo!(),
                 };
 
@@ -445,12 +446,7 @@ impl CodeGen {
                     .function_index("make_env")
                     .ok_or("Function make_env not found in the function table")?;
 
-                // TODO: fix this
-                if imported {
-                    instrs.push(Instruction::I32Const(-1));
-                } else {
-                    instrs.push(Instruction::I32Const(num_params as i32));
-                }
+                instrs.push(Instruction::I32Const(num_params as i32));
                 instrs.push(Instruction::I32Const(func_tbl_idx as i32));
                 instrs.push(Instruction::Call(make_env_idx));
                 instrs.push(Instruction::LocalSet(local_idx as u32));
@@ -469,35 +465,39 @@ impl CodeGen {
 
                 let make_closure_idx = self
                     .functions
-                    .as_mut()
+                    .as_ref()
                     .unwrap()
                     .function_index("make_closure")
                     .ok_or("Function make_closure not found in the function table")?;
 
-                if imported {
-                    instrs.push(Instruction::I32Const(-1));
-                } else {
-                    instrs.push(Instruction::I32Const(num_params as i32));
-                }
+                instrs.push(Instruction::I32Const(func_ty_idx as i32));
                 instrs.push(Instruction::LocalGet(local_idx as u32));
                 instrs.push(Instruction::Call(make_closure_idx));
                 instrs.push(Instruction::LocalSet(local_idx as u32));
 
                 Ok(local_idx as u32)
             }
-            validator::Expression::Symbol(sym) => {
-                let sym_name = &(**sym).borrow().name;
-                let sym_idx = syms.iter().position(|s| s == sym_name).ok_or(format!(
+            validator::Expression::FunctionParameter(name) => {
+                let sym_idx = syms.iter().position(|s| s == name).ok_or(format!(
                     "Symbol {} not accessible in the lambda abstraction",
-                    sym_name
+                    name
                 ))?;
                 Ok(sym_idx as u32)
             }
+            validator::Expression::Symbol(_sym) => {
+                //TODO: function as value
+                //let sym_ref = (**sym).borrow();
+                //let func_idx = functions.table_index(&sym_ref.name).ok_or(format!(
+                //"Function {} not found in the function table",
+                //sym_ref.name
+                //))?;
+
+                //instrs.push(Instruction::I32Const(func_idx as i32));
+                //Ok(local_idx as u32)
+                todo!()
+            }
             validator::Expression::IntLiteral(val) => {
-                let make_val_idx = self
-                    .functions
-                    .as_mut()
-                    .unwrap()
+                let make_val_idx = functions
                     .function_index("make_val")
                     .ok_or("Function make_val not found in the function table")?;
 
@@ -510,73 +510,31 @@ impl CodeGen {
         }
     }
 
-    fn generate_apply_function(&mut self) -> Result<(), String> {
-        // TODO: remove fn_app and value form element in wat file since they never get called indirectly
-
-        fn max_application_in_expr(expr: &validator::Expression) -> u32 {
-            match expr {
-                validator::Expression::FunctionApplication(params) => {
-                    let mut current_max = (params.len() - 1) as u32;
-                    for param in params {
-                        current_max = current_max.max(max_application_in_expr(param));
-                    }
-                    current_max
-                }
-                _ => 0,
-            }
-        }
-
-        let max_application = self
-            .symbol_table
-            .clone()
-            .iter()
-            .map(|(_, s)| {
-                let s = (**s).borrow();
-                match &s.ty {
-                    validator::Type::Function(params) => {
-                        let mut current_max = (params.len() - 1) as u32;
-                        if let Some(expr) = &s.expr {
-                            current_max = current_max.max(max_application_in_expr(expr));
-                        }
-                        current_max
-                    }
-                    _ => 0,
-                }
-            })
-            .max()
-            .unwrap();
-
+    fn generate_apply_function(&mut self) -> Result<u32, String> {
         let functions = self.functions.as_mut().unwrap();
 
-        functions
-            .function_index("apply")
-            .expect("Function apply not found");
-        let apply_table_idx = functions
-            .table_index("apply")
-            .expect("Function apply not found");
-        assert!(
-            apply_table_idx == 0,
-            "apply function must be the first function in the table"
-        );
+        let make_val_idx = functions
+            .function_index("make_val")
+            .expect("Function make_val not found");
 
-        //TODO: remove
-        let print_idx = functions
-            .function_index("print")
-            .expect("Function print not found");
+        let apply_ty_idx = self
+            .function_types
+            .function_type_idx(vec![ValType::I32, ValType::I32], Some(ValType::I32))
+            .unwrap();
+        // DeclaredWasmFunctions insures that the apply function has table index 0 so that it can
+        // be called by eval
+        let apply_func_idx = functions
+            .add_function("apply", apply_ty_idx)
+            .expect("Function apply already exists");
 
         let mut instrs = vec![];
-        for i in 0..=max_application {
-            // TODO: add handling for unit type
-            let ty_idx = self
-                .function_types
-                .function_type(vec![ValType::I32; i as usize], Some(ValType::I32))
-                .unwrap();
 
+        for (idx, (params, ret_ty)) in self.function_types.types_iter() {
             instrs.push(Instruction::LocalGet(0));
-            instrs.push(Instruction::I32Const(i as i32));
+            instrs.push(Instruction::I32Const(idx as i32));
             instrs.push(Instruction::I32Eq);
             instrs.push(Instruction::If(BlockType::Empty));
-            for j in 0..i {
+            for j in 0..params.len() {
                 instrs.push(Instruction::LocalGet(1));
                 instrs.push(Instruction::I32Load(MemArg {
                     align: 2,
@@ -590,47 +548,16 @@ impl CodeGen {
                 offset: 0,
                 memory_index: 0,
             }));
-            instrs.push(Instruction::CallIndirect {
-                ty: ty_idx,
-                table: 0,
-            });
+            instrs.push(Instruction::CallIndirect { ty: idx, table: 0 });
+
+            if ret_ty.is_none() {
+                instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::Call(make_val_idx));
+            }
+
             instrs.push(Instruction::Return);
             instrs.push(Instruction::End);
         }
-
-        // TODO: fix this
-        let ty_idx = self
-            .function_types
-            .function_type(vec![ValType::I32], None)
-            .unwrap();
-        let make_val_idx = functions
-            .function_index("make_val")
-            .expect("Function make_val not found");
-
-        instrs.push(Instruction::LocalGet(0));
-        instrs.push(Instruction::I32Const(-1));
-        instrs.push(Instruction::I32Eq);
-        instrs.push(Instruction::If(BlockType::Empty));
-        instrs.push(Instruction::LocalGet(1));
-        instrs.push(Instruction::I32Load(MemArg {
-            align: 2,
-            offset: 4,
-            memory_index: 0,
-        }));
-        instrs.push(Instruction::LocalGet(1));
-        instrs.push(Instruction::I32Load(MemArg {
-            align: 2,
-            offset: 0,
-            memory_index: 0,
-        }));
-        instrs.push(Instruction::CallIndirect {
-            ty: ty_idx,
-            table: 0,
-        });
-        instrs.push(Instruction::I32Const(0));
-        instrs.push(Instruction::Call(make_val_idx));
-        instrs.push(Instruction::Return);
-        instrs.push(Instruction::End);
 
         instrs.push(Instruction::Unreachable);
         instrs.push(Instruction::End);
@@ -641,7 +568,7 @@ impl CodeGen {
         });
 
         self.code_section.function(&f);
-        Ok(())
+        Ok(apply_func_idx)
     }
 }
 

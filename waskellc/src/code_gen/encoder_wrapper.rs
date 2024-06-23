@@ -17,20 +17,24 @@ impl DeclaredWasmFunctionTypes {
         }
     }
 
-    pub fn function_type(
+    pub fn function_type_idx(
         &mut self,
         params: Vec<ValType>,
         return_ty: Option<ValType>,
     ) -> Option<u32> {
-        let key = (params.clone(), return_ty.clone());
+        let key = (params.clone(), return_ty);
         if let hash_map::Entry::Vacant(e) = self.map.entry(key.clone()) {
-            self.type_section.function(params, return_ty.into_iter());
+            self.type_section.function(params, return_ty);
             let val = self.type_section.len() - 1;
             e.insert(val);
             return Some(val);
         }
 
         return self.map.get(&key).cloned();
+    }
+
+    pub fn types_iter(&self) -> impl Iterator<Item = (u32, (Vec<ValType>, Option<ValType>))> + '_ {
+        self.map.iter().map(|(ty_idx, ty)| (*ty, ty_idx.clone()))
     }
 
     pub fn type_section(self) -> TypeSection {
@@ -75,20 +79,19 @@ impl DeclaredWasmImports {
         self.import_section
             .import(module, name, EntityType::Memory(ty));
     }
+}
 
-    pub fn to_functions(self, apply_func_ty_idx: u32) -> DeclaredWasmFunctions {
-        let mut res = DeclaredWasmFunctions {
-            map: self.map,
-            current_function_index: self.function_count,
-            table_functions_list: vec![],
-            import_section: self.import_section,
+impl From<DeclaredWasmImports> for DeclaredWasmFunctions {
+    fn from(imports: DeclaredWasmImports) -> Self {
+        DeclaredWasmFunctions {
+            map: imports.map,
+            current_function_index: imports.function_count,
+            // The first function is the apply function
+            table_functions_list: vec![0],
+            import_section: imports.import_section,
             function_section: FunctionSection::new(),
             export_section: ExportSection::new(),
-        };
-
-        res.add_function("apply", apply_func_ty_idx).unwrap();
-
-        res
+        }
     }
 }
 
@@ -163,12 +166,14 @@ impl DeclaredWasmFunctions {
 
     pub fn finish(
         mut self,
+        apply_func_idx: u32,
     ) -> (
         ImportSection,
         FunctionSection,
         ExportSection,
         ElementSection,
     ) {
+        self.table_functions_list[0] = apply_func_idx;
         let mut element_section = ElementSection::new();
         element_section.active(
             None,

@@ -127,10 +127,10 @@ impl TopDeclaration {
                         unreachable!()
                     }
 
-                    return Err(format!(
+                    Err(format!(
                         "Expected export call convention after export but got: {:?}",
                         next
-                    ));
+                    ))
                 }
                 _ => Err(format!("Unexpected keyword: {}", ident)),
             },
@@ -383,21 +383,21 @@ impl LeftHandSideExpression {
             Token::ReservedIdent(ident) => match ident.as_str() {
                 "let" => {
                     input.next(); // consume the 'let'
-                    unimplemented!()
+                    todo!()
                 }
                 "if" => {
                     input.next(); // consume the 'if'
-                    unimplemented!()
+                    todo!()
                 }
                 "case" => {
                     input.next(); // consume the 'case'
-                    unimplemented!()
+                    todo!()
                 }
                 _ => Err(format!("Unexpected token for expression: {}", ident)),
             },
             Token::ReservedOperator(op) if op == "\\" => {
                 input.next(); // consume the '\\'
-                unimplemented!()
+                todo!()
             }
             _ => {
                 let mut params = vec![];
@@ -471,7 +471,7 @@ impl FunctionParameterExpression {
                 }
             },
             Token::Special('[') => {
-                unimplemented!()
+                todo!()
             }
             Token::String(s) => Ok(FunctionParameterExpression::StringLiteral(s)),
             Token::Integer(i) => Ok(FunctionParameterExpression::IntegerLiteral(i)),

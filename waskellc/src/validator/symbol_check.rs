@@ -14,7 +14,6 @@ pub struct Symbol {
     pub name: String,
     pub ty: Type,
     pub expr: Option<Expression>,
-    pub scope: Option<Rc<RefCell<Symbol>>>,
     pub is_exported: bool,
     pub import_module_name: Option<&'static str>,
 }
@@ -23,13 +22,8 @@ impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Symbol {{ name: {}, ty: {:?}, expr: {:#?}, scope: {:?}, is_exported: {}, is_imported: {:?} }}",
-            self.name,
-            self.ty,
-            self.expr,
-            self.scope.as_ref().map(|s| s.borrow().name.clone()),
-            self.is_exported,
-            self.import_module_name,
+            "Symbol {{ name: {}, ty: {:?}, expr: {:#?}, is_exported: {}, is_imported: {:?} }}",
+            self.name, self.ty, self.expr, self.is_exported, self.import_module_name,
         )
     }
 }
@@ -75,16 +69,16 @@ pub enum Type {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     IntLiteral(i64),
-    FloatLiteral(f64),
     StringLiteral(String),
     CharLiteral(char),
     Symbol(Rc<RefCell<Symbol>>),
+    FunctionParameter(String),
     FunctionApplication(Vec<Expression>),
     LambdaAbstraction(Vec<String>, Box<Expression>),
     // case expression...
 }
 
-fn parser_type_to_type(parser_type: ast_gen::Type) -> Result<Type, String> {
+fn parser_type_to_type(parser_type: &ast_gen::Type) -> Result<Type, String> {
     // TODO: add support for type applications
     for ty in &parser_type.0 {
         match ty {
@@ -104,14 +98,14 @@ fn parser_type_to_type(parser_type: ast_gen::Type) -> Result<Type, String> {
 
 fn function_type_to_symbol(
     name: String,
-    func_ty: ast_gen::FunctionType,
+    func_ty: &ast_gen::FunctionType,
     is_exported: bool,
     is_imported: bool,
     symbol_table: &mut SymbolTable,
 ) -> Result<(), String> {
     let tys = func_ty
         .0
-        .into_iter()
+        .iter()
         .map(parser_type_to_type)
         .collect::<Result<Vec<Type>, String>>()?;
 
@@ -121,7 +115,6 @@ fn function_type_to_symbol(
             name,
             ty: Type::Function(tys),
             expr: None,
-            scope: None,
             is_exported,
             import_module_name: if is_imported { Some("foreign") } else { None },
         })),
@@ -130,14 +123,14 @@ fn function_type_to_symbol(
 }
 
 fn parser_expr_to_expr(
-    parser_expr: ast_gen::Expression,
-    context: &Symbol,
+    parser_expr: &ast_gen::Expression,
+    scope: &Vec<String>,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match parser_expr {
         ast_gen::Expression::InfixedApplication(lhs, op, rhs) => {
-            let lhs_expr = parser_lhs_expr_to_expr(*lhs, context, symbol_table)?;
-            let rhs_expr = parser_expr_to_expr(*rhs, context, symbol_table)?;
+            let lhs_expr = parser_lhs_expr_to_expr(lhs, scope, symbol_table)?;
+            let rhs_expr = parser_expr_to_expr(rhs, scope, symbol_table)?;
             let op = symbol_table
                 .get(&op.to_string())
                 .ok_or(format!("Operator {} not found", op))?;
@@ -148,7 +141,7 @@ fn parser_expr_to_expr(
             ]))
         }
         ast_gen::Expression::NegatedExpr(expr) => {
-            let expr = parser_expr_to_expr(*expr, context, symbol_table)?;
+            let expr = parser_expr_to_expr(expr, scope, symbol_table)?;
             let negate = symbol_table
                 .get("negate")
                 .ok_or("negate function not found")?;
@@ -158,30 +151,31 @@ fn parser_expr_to_expr(
             ]))
         }
         ast_gen::Expression::LeftHandSideExpression(lhs) => {
-            parser_lhs_expr_to_expr(*lhs, context, symbol_table)
+            parser_lhs_expr_to_expr(lhs, scope, symbol_table)
         }
     }
 }
 
 fn parser_lhs_expr_to_expr(
-    lhs_expr: ast_gen::LeftHandSideExpression,
-    context: &Symbol,
+    lhs_expr: &ast_gen::LeftHandSideExpression,
+    scope: &Vec<String>,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match lhs_expr {
-        ast_gen::LeftHandSideExpression::FunctionApplication(mut params) => {
+        ast_gen::LeftHandSideExpression::FunctionApplication(params) => {
             if params.is_empty() {
                 return Err("Function application must have at least one parameter".to_string());
             }
 
+            let mut param_iter = params.iter();
             if params.len() == 1 {
-                let param = params.remove(0);
-                return parser_fn_param_expr_to_expr(param, context, symbol_table);
+                let param = param_iter.next().unwrap();
+                return parser_fn_param_expr_to_expr(param, scope, symbol_table);
             }
 
             let mut exprs = vec![];
-            for param in params {
-                let expr = parser_fn_param_expr_to_expr(param, context, symbol_table)?;
+            for param in param_iter {
+                let expr = parser_fn_param_expr_to_expr(param, scope, symbol_table)?;
                 exprs.push(expr);
             }
 
@@ -191,91 +185,64 @@ fn parser_lhs_expr_to_expr(
 }
 
 fn parser_fn_param_expr_to_expr(
-    fn_arg_expr: ast_gen::FunctionParameterExpression,
-    context: &Symbol,
+    fn_arg_expr: &ast_gen::FunctionParameterExpression,
+    scope: &Vec<String>,
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match fn_arg_expr {
         ast_gen::FunctionParameterExpression::Variable(name) => {
-            if let Some(symbol) = symbol_table.get(&name) {
-                // if the symbol is in some scope, recursively check if it's in the same scope as the expr
-                // if there is no scope, then it is a global symbol
-                if let Some(scope) = &(**symbol).borrow().scope {
-                    fn recursively_check_scope(
-                        context: &Symbol,
-                        scope: Rc<RefCell<Symbol>>,
-                    ) -> bool {
-                        if *context == *(*scope).borrow() {
-                            return true;
-                        }
-
-                        if let Some(s) = (*scope).borrow().scope.as_ref() {
-                            return recursively_check_scope(context, s.clone());
-                        }
-
-                        false
-                    }
-
-                    if !recursively_check_scope(context, scope.clone()) {
-                        return Err(format!("Symbol {} not found in scope", name));
-                    }
-                }
-
+            if let Some(symbol) = symbol_table.get(name) {
                 Ok(Expression::Symbol(symbol.clone()))
+            } else if !scope.is_empty() {
+                // check if the symbol is in the scope
+                Ok(scope
+                    .iter()
+                    .find(|s| **s == *name)
+                    .map(|s| Expression::FunctionParameter(s.clone()))
+                    .ok_or(format!("Symbol {} not found", name))?)
             } else {
                 Err(format!("Symbol {} not found", name))
             }
         }
         ast_gen::FunctionParameterExpression::ParenthesizedExpr(expr) => {
-            parser_expr_to_expr(*expr, context, symbol_table)
+            parser_expr_to_expr(expr, scope, symbol_table)
         }
-        ast_gen::FunctionParameterExpression::IntegerLiteral(i) => Ok(Expression::IntLiteral(i)),
+        ast_gen::FunctionParameterExpression::IntegerLiteral(i) => Ok(Expression::IntLiteral(*i)),
         ast_gen::FunctionParameterExpression::StringLiteral(s) => {
             Ok(Expression::StringLiteral(s.clone()))
         }
-        ast_gen::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(c)),
+        ast_gen::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(*c)),
         ast_gen::FunctionParameterExpression::Unit => todo!(),
     }
 }
 
 fn add_function_decl_to_symbol(
-    func_decl: ast_gen::FunctionDeclaration,
+    func_decl: &ast_gen::FunctionDeclaration,
     symbol_table: &mut SymbolTable,
 ) -> Result<(), String> {
     let ast_gen::FunctionDeclaration { name, lhs, rhs } = func_decl;
 
     let symbol = symbol_table
-        .get(&name)
+        .get(name)
         .ok_or(format!("Function type signature for {} not found", name))?;
     let symbol = symbol.clone();
 
     let mut sym_params = vec![];
-    for (i, param) in lhs.into_iter().enumerate() {
+    for (i, param) in lhs.iter().enumerate() {
         match param {
-            ast_gen::FunctionParameterPattern::AsPattern(name, None) => {
+            ast_gen::FunctionParameterPattern::AsPattern(param_name, None) => {
                 let symbol_ref = (*symbol).borrow();
-                let ty = symbol_ref
+                symbol_ref
                     .param_type(i)
                     .ok_or(format!("Function {} has too many parameters", name))?;
 
-                symbol_table.insert(
-                    name.clone(),
-                    Rc::new(RefCell::new(Symbol {
-                        name: name.clone(),
-                        ty: ty.clone(),
-                        expr: None,
-                        scope: Some(symbol.clone()),
-                        is_exported: false,
-                        import_module_name: None,
-                    })),
-                );
-                sym_params.push(name);
+                sym_params.push(param_name.to_string());
             }
             _ => todo!(),
         }
     }
 
-    let expr = parser_expr_to_expr(rhs, &(*symbol).borrow(), symbol_table)?;
+    let expr = parser_expr_to_expr(rhs, &sym_params, symbol_table)?;
     let mut symbol_ref = (*symbol).borrow_mut();
     if sym_params.is_empty() {
         symbol_ref.expr = Some(expr);
@@ -294,7 +261,6 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             name: "+".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            scope: None,
             is_exported: false,
             import_module_name: Some("lib"),
         },
@@ -302,7 +268,6 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             name: "-".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            scope: None,
             is_exported: false,
             import_module_name: Some("lib"),
         },
@@ -310,7 +275,6 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             name: "*".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            scope: None,
             is_exported: false,
             import_module_name: Some("lib"),
         },
@@ -318,7 +282,6 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             name: "/".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            scope: None,
             is_exported: false,
             import_module_name: Some("lib"),
         },
@@ -326,7 +289,6 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             name: "negate".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int]),
             expr: None,
-            scope: None,
             is_exported: false,
             import_module_name: Some("lib"),
         },
@@ -336,25 +298,46 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
         symbol_table.insert(symbol.name.clone(), Rc::new(RefCell::new(symbol.clone())));
     }
 
-    for decl in ast.0 {
-        match decl {
-            ast_gen::TopDeclaration::TypeSig {
+    // add type signatures to symbol table
+    ast.0
+        .iter()
+        .filter(|decl| matches!(decl, ast_gen::TopDeclaration::TypeSig { .. }))
+        .for_each(|decl| {
+            if let ast_gen::TopDeclaration::TypeSig {
                 name,
                 ty,
                 is_exported,
                 is_imported,
                 ..
-            } => {
-                let is_exported = if name == "main" { true } else { is_exported };
-                function_type_to_symbol(name, ty, is_exported, is_imported, &mut symbol_table)?;
+            } = decl
+            {
+                let is_exported = if name == "main" { true } else { *is_exported };
+                function_type_to_symbol(
+                    name.clone(),
+                    ty,
+                    is_exported,
+                    *is_imported,
+                    &mut symbol_table,
+                )
+                .unwrap();
             }
-            ast_gen::TopDeclaration::FunctionDecl(func_decl) => {
-                let name = func_decl.name.clone();
-                add_function_decl_to_symbol(func_decl, &mut symbol_table)?;
-                let symbol = symbol_table.get(&name).unwrap();
-                type_check_sym(&symbol.borrow())?;
+        });
+
+    // add function declarations to symbol table
+    ast.0
+        .iter()
+        .filter(|decl| matches!(decl, ast_gen::TopDeclaration::FunctionDecl(_)))
+        .for_each(|decl| {
+            if let ast_gen::TopDeclaration::FunctionDecl(func_decl) = decl {
+                add_function_decl_to_symbol(func_decl, &mut symbol_table).unwrap();
             }
-        }
+        });
+
+    println!("{:#?}", symbol_table);
+
+    // type check all symbols
+    for (_, symbol) in symbol_table.iter() {
+        type_check_sym(&symbol.borrow())?;
     }
 
     Ok(symbol_table)

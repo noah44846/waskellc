@@ -12,15 +12,11 @@
     (unreachable)
   )
 
-  (func $value (param $x i32) (result i32)
-    (local.get $x)
-  )
-
-  (func $make_closure (export "make_closure") (param $n i32) (param $env i32) (result i32)
+  (func $make_closure (export "make_closure") (param $ty_idx i32) (param $env i32) (result i32)
     (local $a i32)
     (local.set $a (call $alloc (i32.const 9)))
     (i32.store8 (local.get $a) (i32.const 0))
-    (i32.store offset=1 (local.get $a) (local.get $n))
+    (i32.store offset=1 (local.get $a) (local.get $ty_idx))
     (i32.store offset=5 (local.get $a) (local.get $env))
     (local.get $a)
   )
@@ -86,8 +82,7 @@
       (if
         (i32.ne (i32.const 0) (i32.load8_u (local.get $ptr)))
         (then
-          (return (call $value
-            (i32.load offset=1 (local.get $ptr)))))
+          (return (i32.load offset=1 (local.get $ptr))))
         (else
           (local.set $ptr
             (call_indirect (type $ap2)
