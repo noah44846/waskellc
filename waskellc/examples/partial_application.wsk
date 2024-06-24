@@ -1,0 +1,22 @@
+foreign export wasm add :: Int -> Int -> Int;
+add = (+);
+
+plusOne :: Int -> Int;
+plusOne = (+) 1;
+
+add' :: Int -> Int -> Int;
+add' x = (+) x;
+
+apply :: (Int -> Int -> Int) -> Int -> Int -> Int;
+apply f x y = ((f) x) y;
+-- equivalent to: f x y
+
+apply' :: (Int -> Int -> Int) -> Int -> Int -> Int;
+apply' f = f;
+
+applyFlip :: Int -> (Int -> Int -> Int) -> (Int -> Int);
+-- equivalent to: Int -> (Int -> Int -> Int) -> Int -> Int
+applyFlip x f = f x;
+
+main :: Int;
+main = (apply add 1 2) + (apply1of2 1 add' 2) + (apply' add' 1 2);

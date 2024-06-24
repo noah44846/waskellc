@@ -6,7 +6,9 @@ sq_print x = print (square x);
 
 foreign import wasm print :: Int -> ();
 
---main :: Int;
---main = square (square (square 5))
+-- Example of partial application on the imported function
+unit_snd :: () -> () -> ();
+unit_snd x y = y;
+
 main :: ();
-main = sq_print (square (square 5))
+main = unit_snd (sq_print 3) (sq_print 4);

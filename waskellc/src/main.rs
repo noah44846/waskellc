@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use std::{fs, process::Command};
+use std::{fs, path::PathBuf, process::Command};
 
 use clap::Parser;
 
@@ -9,20 +9,31 @@ use waskellc::compile;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    input: String,
+    input: PathBuf,
 
     #[clap(short, long, default_value = None)]
-    output: Option<String>,
+    output: Option<PathBuf>,
+
+    #[clap(short = 'L', long)]
+    debug_lexer: bool,
+
+    #[clap(short = 'A', long)]
+    debug_ast: bool,
+
+    #[clap(short = 'S', long)]
+    debug_symbols: bool,
+
+    #[clap(short = 'D', long)]
+    debug_desugar: bool,
 }
 
-fn out_path(in_path: &str) -> String {
-    let mut split = in_path.split('.').collect::<Vec<&str>>();
-    let split_len = split.len();
-    split[split_len - 1] = "wasm";
-    split.join(".")
+fn out_path(in_path: PathBuf) -> PathBuf {
+    let mut out_path = in_path;
+    out_path.set_extension("wasm");
+    out_path
 }
 
-fn merge_command(out_path: &str) -> Result<(), String> {
+fn merge_command(out_path: PathBuf) -> Result<(), String> {
     let mut cmd;
 
     if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
@@ -40,10 +51,10 @@ fn merge_command(out_path: &str) -> Result<(), String> {
     let out = cmd
         .arg("wasm-lib/lib.wasm")
         .arg("lib")
-        .arg(out_path)
+        .arg(&out_path)
         .arg("out")
         .arg("-o")
-        .arg(out_path)
+        .arg(&out_path)
         .output()
         .expect("Failed to merge wasm files");
 
@@ -61,11 +72,17 @@ fn main() -> Result<(), String> {
     let args = Args::parse();
 
     let file_contents = fs::read_to_string(&args.input).unwrap();
-    let out_path = args.output.unwrap_or_else(|| out_path(&args.input));
+    let out_path = args.output.unwrap_or_else(|| out_path(args.input));
 
-    let module_bytes = compile(&file_contents)?;
+    let module_bytes = compile(
+        &file_contents,
+        args.debug_lexer,
+        args.debug_ast,
+        args.debug_symbols,
+        args.debug_desugar,
+    )?;
 
     fs::write(&out_path, module_bytes).unwrap();
 
-    merge_command(&out_path)
+    merge_command(out_path)
 }

@@ -6,10 +6,14 @@ pub mod ast_gen;
 pub mod code_gen;
 pub mod validator;
 
-pub fn compile(file_contents: &str) -> Result<Vec<u8>, String> {
-    let ast = ast_gen::parse(file_contents)?;
-    println!("AST:\n{:#?}", ast);
-    let symbol_table = validator::validate(ast)?;
-    println!("Symbol Table:\n{:#?}", symbol_table);
+pub fn compile(
+    file_contents: &str,
+    debug_lexer: bool,
+    debug_ast: bool,
+    debug_symbols: bool,
+    debug_desugar: bool,
+) -> Result<Vec<u8>, String> {
+    let ast = ast_gen::parse(file_contents, debug_lexer, debug_ast)?;
+    let symbol_table = validator::validate(ast, debug_symbols, debug_desugar)?;
     code_gen::generate_code(symbol_table)
 }

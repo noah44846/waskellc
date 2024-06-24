@@ -1,31 +1,28 @@
 // SPDX-License-Identifier: MIT
 
-//! This module for doing type checking and other validations on the AST of the Waskell programming language.
-
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::ast_gen;
-use crate::validator::type_check::type_check_sym;
+use crate::validator::type_check::flatten_function_ty;
+
+use super::type_check::type_check_syms;
 
 pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
 
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
+pub enum IsForeign {
+    LibImported,
+    ForeignImported,
+    Exported,
+    NotForeign,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Symbol {
     pub name: String,
     pub ty: Type,
     pub expr: Option<Expression>,
-    pub is_exported: bool,
-    pub import_module_name: Option<&'static str>,
-}
-
-impl fmt::Debug for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Symbol {{ name: {}, ty: {:?}, expr: {:#?}, is_exported: {}, is_imported: {:?} }}",
-            self.name, self.ty, self.expr, self.is_exported, self.import_module_name,
-        )
-    }
+    is_foreign: IsForeign,
 }
 
 impl Symbol {
@@ -50,15 +47,31 @@ impl Symbol {
             _ => 0,
         }
     }
+
+    pub fn is_imported(&self) -> bool {
+        matches!(
+            self.is_foreign,
+            IsForeign::LibImported | IsForeign::ForeignImported
+        )
+    }
+
+    pub fn is_exported(&self) -> bool {
+        matches!(self.is_foreign, IsForeign::Exported)
+    }
+
+    pub fn import_module_name(&self) -> Option<&'static str> {
+        match self.is_foreign {
+            IsForeign::ForeignImported => Some("foreign"),
+            IsForeign::LibImported => Some("lib"),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Int,
-    Float,
-    Boolean,
     Char,
-    String,
     Function(Vec<Type>),
     List(Box<Type>),
     Tuple(Vec<Type>),
@@ -66,7 +79,7 @@ pub enum Type {
     // custom type
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum Expression {
     IntLiteral(i64),
     StringLiteral(String),
@@ -78,22 +91,28 @@ pub enum Expression {
     // case expression...
 }
 
-fn parser_type_to_type(parser_type: &ast_gen::Type) -> Result<Type, String> {
-    // TODO: add support for type applications
-    for ty in &parser_type.0 {
-        match ty {
-            ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
-                "Int" => return Ok(Type::Int),
-                "Float" => return Ok(Type::Float),
-                "Boolean" => return Ok(Type::Boolean),
-                "Char" => return Ok(Type::Char),
-                "String" => return Ok(Type::String),
-                _ => todo!(),
-            },
-            ast_gen::TypeApplicationElement::Unit => return Ok(Type::Unit),
+impl fmt::Debug for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expression::IntLiteral(i) => write!(f, "IntLiteral({})", i),
+            Expression::StringLiteral(s) => write!(f, "StringLiteral({})", s),
+            Expression::CharLiteral(c) => write!(f, "CharLiteral({})", c),
+            Expression::Symbol(sym) => write!(f, "Symbol({})", sym.as_ref().borrow().name),
+            Expression::FunctionParameter(name) => write!(f, "FunctionParameter({})", name),
+            Expression::FunctionApplication(exprs) if f.alternate() => {
+                write!(f, "FunctionApplication({:#?})", exprs)
+            }
+            Expression::FunctionApplication(exprs) => {
+                write!(f, "FunctionApplication({:?})", exprs)
+            }
+            Expression::LambdaAbstraction(params, expr) if f.alternate() => {
+                write!(f, "LambdaAbstraction({:#?}, {:#?})", params, expr)
+            }
+            Expression::LambdaAbstraction(params, expr) => {
+                write!(f, "LambdaAbstraction({:?}, {:?})", params, expr)
+            }
         }
     }
-    Err("No type found".to_string())
 }
 
 fn function_type_to_symbol(
@@ -109,16 +128,92 @@ fn function_type_to_symbol(
         .map(parser_type_to_type)
         .collect::<Result<Vec<Type>, String>>()?;
 
+    let ty = if tys.len() == 1 {
+        flatten_function_ty(&tys[0])?
+    } else {
+        flatten_function_ty(&Type::Function(tys))?
+    };
+
     symbol_table.insert(
         name.clone(),
         Rc::new(RefCell::new(Symbol {
             name,
-            ty: Type::Function(tys),
+            ty,
             expr: None,
-            is_exported,
-            import_module_name: if is_imported { Some("foreign") } else { None },
+            is_foreign: if is_imported {
+                IsForeign::ForeignImported
+            } else if is_exported {
+                IsForeign::Exported
+            } else {
+                IsForeign::NotForeign
+            },
         })),
     );
+    Ok(())
+}
+
+fn parser_type_to_type(parser_type: &ast_gen::Type) -> Result<Type, String> {
+    // TODO: add support for type applications
+    for ty in &parser_type.0 {
+        let ty = match ty {
+            ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
+                "Int" => Type::Int,
+                "Char" => Type::Char,
+                "String" => Type::List(Box::new(Type::Char)),
+                _ => todo!(),
+            },
+            ast_gen::TypeApplicationElement::Unit => Type::Unit,
+            ast_gen::TypeApplicationElement::ParenthesizedType(ty) => {
+                let mut res = vec![];
+                for ty in &ty.0 {
+                    res.push(parser_type_to_type(ty)?);
+                }
+
+                Type::Function(res)
+            }
+        };
+
+        return Ok(ty);
+    }
+    Err("No type found".to_string())
+}
+
+fn add_function_decl_to_symbol(
+    func_decl: &ast_gen::FunctionDeclaration,
+    symbol_table: &mut SymbolTable,
+) -> Result<(), String> {
+    let ast_gen::FunctionDeclaration { name, lhs, rhs } = func_decl;
+
+    let symbol = symbol_table
+        .get(name)
+        .ok_or(format!("Function type signature for {} not found", name))?;
+    let symbol = symbol.clone();
+
+    let mut sym_params = vec![];
+    for (i, param) in lhs.iter().enumerate() {
+        match param {
+            ast_gen::FunctionParameterPattern::AsPattern(param_name, None) => {
+                let symbol_ref = symbol.as_ref().borrow();
+                symbol_ref
+                    .param_type(i)
+                    .ok_or(format!("Function {} has too many parameters", name))?;
+
+                // TODO: find out if a lambda needs explicit type annotations for parameters
+                //let ty = symbol_ref.param_type(i).unwrap();
+
+                sym_params.push(param_name.to_string());
+            }
+            _ => todo!(),
+        }
+    }
+
+    let expr = parser_expr_to_expr(rhs, &sym_params, symbol_table)?;
+    let mut symbol_ref = symbol.as_ref().borrow_mut();
+    if sym_params.is_empty() {
+        symbol_ref.expr = Some(expr);
+        return Ok(());
+    }
+    symbol_ref.expr = Some(Expression::LambdaAbstraction(sym_params, Box::new(expr)));
     Ok(())
 }
 
@@ -216,43 +311,11 @@ fn parser_fn_param_expr_to_expr(
     }
 }
 
-fn add_function_decl_to_symbol(
-    func_decl: &ast_gen::FunctionDeclaration,
-    symbol_table: &mut SymbolTable,
-) -> Result<(), String> {
-    let ast_gen::FunctionDeclaration { name, lhs, rhs } = func_decl;
-
-    let symbol = symbol_table
-        .get(name)
-        .ok_or(format!("Function type signature for {} not found", name))?;
-    let symbol = symbol.clone();
-
-    let mut sym_params = vec![];
-    for (i, param) in lhs.iter().enumerate() {
-        match param {
-            ast_gen::FunctionParameterPattern::AsPattern(param_name, None) => {
-                let symbol_ref = (*symbol).borrow();
-                symbol_ref
-                    .param_type(i)
-                    .ok_or(format!("Function {} has too many parameters", name))?;
-
-                sym_params.push(param_name.to_string());
-            }
-            _ => todo!(),
-        }
-    }
-
-    let expr = parser_expr_to_expr(rhs, &sym_params, symbol_table)?;
-    let mut symbol_ref = (*symbol).borrow_mut();
-    if sym_params.is_empty() {
-        symbol_ref.expr = Some(expr);
-        return Ok(());
-    }
-    symbol_ref.expr = Some(Expression::LambdaAbstraction(sym_params, Box::new(expr)));
-    Ok(())
-}
-
-pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
+pub fn validate(
+    ast: ast_gen::TopDeclarations,
+    debug_symbols: bool,
+    debug_desugar: bool,
+) -> Result<SymbolTable, String> {
     let mut symbol_table: SymbolTable = HashMap::new();
 
     // TODO: replace this with a std lib
@@ -261,36 +324,31 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             name: "+".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_exported: false,
-            import_module_name: Some("lib"),
+            is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "-".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_exported: false,
-            import_module_name: Some("lib"),
+            is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "*".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_exported: false,
-            import_module_name: Some("lib"),
+            is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "/".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_exported: false,
-            import_module_name: Some("lib"),
+            is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "negate".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int]),
             expr: None,
-            is_exported: false,
-            import_module_name: Some("lib"),
+            is_foreign: IsForeign::LibImported,
         },
     ];
 
@@ -333,11 +391,15 @@ pub fn validate(ast: ast_gen::TopDeclarations) -> Result<SymbolTable, String> {
             }
         });
 
-    println!("{:#?}", symbol_table);
+    if debug_symbols {
+        println!("Symbol Table:\n{:#?}", symbol_table);
+    }
 
     // type check all symbols
-    for (_, symbol) in symbol_table.iter() {
-        type_check_sym(&symbol.borrow())?;
+    type_check_syms(&mut symbol_table)?;
+
+    if debug_desugar {
+        println!("Desugared Symbol Table:\n{:#?}", symbol_table);
     }
 
     Ok(symbol_table)

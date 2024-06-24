@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use wasm_encoder::*;
 
@@ -76,18 +76,15 @@ impl CodeGen {
         self.symbol_table
             .clone()
             .values()
-            .filter(|s| {
-                let s = (***s).borrow();
-                s.import_module_name.is_some()
-            })
+            .map(|s| s.as_ref().borrow())
+            .filter(|s| s.is_imported())
             .map(|s| {
-                let symbol_ref = (**s).borrow();
-                let ty_idx = self.func_ty_idx_from_symbol(&symbol_ref, true)?;
-                let module_name = symbol_ref.import_module_name.unwrap();
+                let ty_idx = self.func_ty_idx_from_symbol(&s, true)?;
+                let module_name = s.import_module_name().unwrap();
                 self.imports
                     .as_mut()
                     .unwrap()
-                    .import_func(module_name, &symbol_ref.name, ty_idx)
+                    .import_func(module_name, &s.name, ty_idx)
             })
             .collect::<Result<Vec<_>, String>>()?;
 
@@ -97,11 +94,9 @@ impl CodeGen {
         self.symbol_table
             .clone()
             .values()
-            .filter(|s| {
-                let s = (***s).borrow();
-                s.import_module_name == Some("foreign")
-            })
-            .map(|s| self.generate_foreign_import_wrapper(&(**s).borrow()))
+            .map(|s| s.as_ref().borrow())
+            .filter(|s| s.import_module_name() == Some("foreign"))
+            .map(|s| self.generate_foreign_import_wrapper(&s))
             .collect::<Result<Vec<_>, String>>()?;
 
         Ok(())
@@ -111,11 +106,9 @@ impl CodeGen {
         self.symbol_table
             .clone()
             .values()
-            .filter(|s| {
-                let s = (***s).borrow();
-                s.import_module_name.is_none()
-            })
-            .map(|s| match self.create_signature(s) {
+            .map(|s| s.as_ref().borrow())
+            .filter(|s| !s.is_imported())
+            .map(|s| match self.create_signature(&s) {
                 Ok(_) => Ok(s),
                 Err(e) => Err(e),
             })
@@ -160,9 +153,7 @@ impl CodeGen {
                 let params = vec![ValType::I32; func_params.len() - 1];
 
                 let return_ty = if let validator::Type::Unit = func_params.last().unwrap() {
-                    if check_for_export
-                        && (symbol.is_exported || symbol.import_module_name.is_some())
-                    {
+                    if check_for_export && (symbol.is_imported() || symbol.is_exported()) {
                         None
                     } else {
                         Some(ValType::I32)
@@ -181,24 +172,22 @@ impl CodeGen {
             .unwrap())
     }
 
-    fn create_signature(&mut self, symbol: &Rc<RefCell<validator::Symbol>>) -> Result<(), String> {
-        let symbol_ref = (**symbol).borrow();
-
-        let func_type = self.func_ty_idx_from_symbol(&symbol_ref, false)?;
+    fn create_signature(&mut self, symbol: &validator::Symbol) -> Result<(), String> {
+        let func_type = self.func_ty_idx_from_symbol(symbol, false)?;
 
         self.functions
             .as_mut()
             .unwrap()
-            .add_function(&symbol_ref.name, func_type)
+            .add_function(&symbol.name, func_type)
             .ok_or(format!(
                 "Function {} already exists in the function table",
-                symbol_ref.name
+                symbol.name
             ))?;
 
-        // TODO: more elegant way to handle the order in which the functions are added (function section and code section have to be in the same order)
-        if symbol_ref.is_exported {
-            let func_type = self.func_ty_idx_from_symbol(&symbol_ref, true)?;
-            let exported_func_name = format!("exported_{}", symbol_ref.name);
+        // TODO: consider more elegant way to handle the order in which the functions are added (function section and code section have to be in the same order)
+        if symbol.is_exported() {
+            let func_type = self.func_ty_idx_from_symbol(symbol, true)?;
+            let exported_func_name = format!("exported_{}", symbol.name);
             self.functions
                 .as_mut()
                 .unwrap()
@@ -206,23 +195,19 @@ impl CodeGen {
             self.functions
                 .as_mut()
                 .unwrap()
-                .export(&exported_func_name, &symbol_ref.name);
+                .export(&exported_func_name, &symbol.name);
         }
 
         Ok(())
     }
 
-    fn generate_function_body(
-        &mut self,
-        symbol: &Rc<RefCell<validator::Symbol>>,
-    ) -> Result<(), String> {
+    fn generate_function_body(&mut self, symbol: &validator::Symbol) -> Result<(), String> {
         let mut locals = vec![];
         let mut instrs = vec![];
 
-        let symbol_ref = (**symbol).borrow();
-        let expr = symbol_ref.expr.as_ref().ok_or(format!(
+        let expr = symbol.expr.as_ref().ok_or(format!(
             "Function {} does not have an expression",
-            symbol_ref.name
+            symbol.name
         ))?;
 
         self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs)?;
@@ -258,9 +243,9 @@ impl CodeGen {
 
         add_function_to_code_section(&mut self.code_section, &locals, &instrs);
 
-        if symbol_ref.is_exported {
+        if symbol.is_exported() {
             let mut instrs = vec![];
-            self.generate_instructions_from_exported(&symbol_ref, &mut instrs)?;
+            self.generate_instructions_from_exported(symbol, &mut instrs)?;
             add_function_to_code_section(&mut self.code_section, &[], &instrs);
         }
 
@@ -395,9 +380,42 @@ impl CodeGen {
                 instrs.push(Instruction::LocalGet(local_idx));
                 instrs.push(Instruction::End);
             }
-            _ => todo!(),
-        }
+            validator::Expression::Symbol(sym) => {
+                let sym_ref = sym.as_ref().borrow();
 
+                for i in 0..sym_ref.arity() {
+                    instrs.push(Instruction::LocalGet(i as u32));
+                }
+
+                let func_idx = self
+                    .functions
+                    .as_mut()
+                    .unwrap()
+                    .function_index(&sym_ref.name)
+                    .ok_or(format!(
+                        "Function {} not found in the function table",
+                        sym_ref.name
+                    ))?;
+
+                instrs.push(Instruction::Call(func_idx));
+                instrs.push(Instruction::End);
+            }
+            validator::Expression::IntLiteral(val) => {
+                let make_val_idx = self
+                    .functions
+                    .as_mut()
+                    .unwrap()
+                    .function_index("make_val")
+                    .ok_or("Function make_val not found in the function table")?;
+
+                instrs.push(Instruction::I32Const(*val as i32));
+                instrs.push(Instruction::Call(make_val_idx));
+                instrs.push(Instruction::End);
+            }
+            validator::Expression::CharLiteral(_) => todo!(),
+            validator::Expression::StringLiteral(_) => todo!(),
+            _ => todo!("Expression not supported or not implemented"),
+        }
         Ok(())
     }
 
@@ -419,9 +437,9 @@ impl CodeGen {
 
                 let (func_tbl_idx, func_ty_idx) = match func {
                     validator::Expression::Symbol(sym) => {
-                        let sym_ref = (**sym).borrow();
+                        let sym_ref = sym.as_ref().borrow();
 
-                        let name = if let Some("foreign") = sym_ref.import_module_name {
+                        let name = if sym_ref.import_module_name() == Some("foreign") {
                             format!("imported_{}", &sym_ref.name)
                         } else {
                             sym_ref.name.clone()
@@ -431,12 +449,12 @@ impl CodeGen {
                             .ok_or(format!("Function {} not found in the function table", name))?;
 
                         let ty_idx =
-                            self.func_ty_idx_from_symbol(&(**sym).borrow(), !sym_ref.is_exported)?;
+                            self.func_ty_idx_from_symbol(&sym_ref, !sym_ref.is_exported())?;
 
                         (tbl_idx, ty_idx)
                     }
                     // TODO: function as value
-                    _ => todo!(),
+                    _ => todo!("Function as value not implemented {:?}", func),
                 };
 
                 let make_env_idx = self

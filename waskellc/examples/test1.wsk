@@ -1,5 +1,0 @@
-f :: Int -> Int -> Int -> Int;
-f x y z = x + y + z;
-
-main :: Int;
-main = f (3 * 4) (f 1 2 (-4 / 2)) (10 - 3) -- should be 12 + 1 + 7 = 20

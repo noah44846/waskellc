@@ -35,6 +35,9 @@ impl TopDeclarations {
             match next_token(input, true)? {
                 Token::Special(';') => {
                     input.next(); // consume the ';'
+                    if input.peek().is_none() {
+                        break;
+                    }
                 }
                 t => {
                     return Err(format!("Unexpected token {:?} after declaration", t));
@@ -187,26 +190,6 @@ impl FunctionType {
 #[derive(Debug)]
 pub struct Type(pub Vec<TypeApplicationElement>);
 
-impl Type {
-    fn parse(input: &mut TokenIter) -> Result<Self, String> {
-        match next_token(input, false)? {
-            Token::ConstructorIdent(ident) => {
-                let elements = vec![TypeApplicationElement::TypeConstructor(ident)];
-                Ok(Type(elements))
-            }
-            Token::Special('(') => {
-                if let Token::Special(')') = next_token(input, true)? {
-                    input.next(); // consume the ')'
-                    return Ok(Type(vec![TypeApplicationElement::Unit]));
-                }
-                // TODO: parse tuple types or parenthesized types
-                todo!()
-            }
-            t => Err(format!("Expected type constructor, got {:?}", t)),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum TypeApplicationElement {
     Unit,
@@ -216,8 +199,55 @@ pub enum TypeApplicationElement {
     //ListType(Box<Type>),
     //TupleType(Vec<Type>),
     //TypeVariable(String),
-    //ParenthesizedType(Box<Type>),
+    ParenthesizedType(Box<FunctionType>),
     TypeConstructor(String),
+}
+
+impl Type {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        match next_token(input, false)? {
+            Token::ConstructorIdent(ident) => {
+                let elements = vec![TypeApplicationElement::TypeConstructor(ident)];
+                Ok(Type(elements))
+            }
+            Token::Special('(') => {
+                match next_token(input, true)? {
+                    Token::Special(')') => {
+                        input.next(); // consume the ')'
+                        return Ok(Type(vec![TypeApplicationElement::Unit]));
+                    }
+                    Token::Special(',') => {
+                        todo!("unapplied tuple type");
+                    }
+                    Token::ReservedOperator(op) if op == "->" => {
+                        todo!("unapplied function type");
+                    }
+                    _ => {}
+                };
+
+                // Parse function type
+                loop {
+                    let elem = FunctionType::parse(input)?;
+                    match next_token(input, true)? {
+                        Token::Special(',') => {
+                            todo!("Tuple types");
+                        }
+                        Token::Special(')') => {
+                            input.next(); // consume the ')'
+                            return Ok(Type(vec![TypeApplicationElement::ParenthesizedType(
+                                Box::new(elem),
+                            )]));
+                        }
+                        _ => Err(format!(
+                            "Expected ',' or ')' after type in parenthesized type, got {:?}",
+                            next_token(input, true)?
+                        ))?,
+                    }
+                }
+            }
+            t => todo!("Type parsing for lists and type variables: {:?}", t),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -481,8 +511,18 @@ impl FunctionParameterExpression {
     }
 }
 
-pub fn parse(input: &str) -> Result<TopDeclarations, String> {
+pub fn parse(input: &str, debug_lexer: bool, debug_ast: bool) -> Result<TopDeclarations, String> {
+    if debug_lexer {
+        println!("Tokens: {:#?}", Token::lexer(input).collect::<Vec<_>>());
+    }
+
     let mut tokens = Token::lexer(input).peekable();
 
-    TopDeclarations::parse(&mut tokens)
+    let ast = TopDeclarations::parse(&mut tokens)?;
+
+    if debug_ast {
+        println!("{:#?}", ast);
+    }
+
+    Ok(ast)
 }

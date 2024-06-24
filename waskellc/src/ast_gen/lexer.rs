@@ -10,7 +10,7 @@ use logos::{Lexer, Logos};
 #[logos(skip r"\s+")]
 pub enum Token {
     // any string that starts with a lowercase letter or _ and is followed by any word character (a-z, A-Z, 0-9, _) or '
-    #[regex(r"[[[:lower:]]_][[:word:]]*", |lex| lex.slice().to_owned())]
+    #[regex(r"[[[:lower:]]_][[[:word:]]']*", |lex| lex.slice().to_owned())]
     VariableIdent(String),
 
     // any string that starts with an uppercase letter and is followed by any word character (a-z, A-Z, 0-9, _) or '

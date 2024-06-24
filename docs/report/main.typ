@@ -628,6 +628,7 @@ The context-free syntax of Waskell is a subset of Haskell (defined in report @ha
 //- string escaping
 //- No sections (e.g. (1 +) or (+ 1))
 //- labeled fields in records
+//- operator precedence
 
 In short the subset of Haskell that is used in Waskell is the following:
 - Let bindings (and where bindings)
@@ -837,6 +838,8 @@ The standard library of the functional language is a subset of the Haskell stand
 // - apply function generation because the type of the function being called indirectly is not known
 // - wasm_encode crate relies on order of functions in the module to be correct and that is a challenge to maintain
 // - merge the wasm-lib
+// - the apply function again but this time more generic (not only integer arguments) / unit type issues in general
+// - The representing of PAPs at the top level for code generation
 
 = Evaluation
 
