@@ -11,3 +11,4 @@ clap = { version = "4.5.7", features = ["derive"] }
 logos = "0.14.0"
 wasm-encoder = "0.210.0"
 wasmparser = "0.210.0"
+wasmprinter = "0.210.0"

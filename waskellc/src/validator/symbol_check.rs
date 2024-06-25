@@ -219,7 +219,7 @@ fn add_function_decl_to_symbol(
 
 fn parser_expr_to_expr(
     parser_expr: &ast_gen::Expression,
-    scope: &Vec<String>,
+    scope: &[String],
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match parser_expr {
@@ -253,7 +253,7 @@ fn parser_expr_to_expr(
 
 fn parser_lhs_expr_to_expr(
     lhs_expr: &ast_gen::LeftHandSideExpression,
-    scope: &Vec<String>,
+    scope: &[String],
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match lhs_expr {
@@ -281,7 +281,7 @@ fn parser_lhs_expr_to_expr(
 
 fn parser_fn_param_expr_to_expr(
     fn_arg_expr: &ast_gen::FunctionParameterExpression,
-    scope: &Vec<String>,
+    scope: &[String],
     symbol_table: &SymbolTable,
 ) -> Result<Expression, String> {
     match fn_arg_expr {

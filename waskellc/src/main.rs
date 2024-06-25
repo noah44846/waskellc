@@ -25,6 +25,12 @@ struct Args {
 
     #[clap(short = 'D', long)]
     debug_desugar: bool,
+
+    #[clap(short = 'W', long)]
+    debug_wasm: bool,
+
+    #[clap(short = 'm', long, default_value = "true")]
+    debug_merge: bool,
 }
 
 fn out_path(in_path: PathBuf) -> PathBuf {
@@ -80,9 +86,14 @@ fn main() -> Result<(), String> {
         args.debug_ast,
         args.debug_symbols,
         args.debug_desugar,
+        args.debug_wasm,
     )?;
 
     fs::write(&out_path, module_bytes).unwrap();
 
-    merge_command(out_path)
+    if args.debug_merge {
+        merge_command(out_path)
+    } else {
+        Ok(())
+    }
 }

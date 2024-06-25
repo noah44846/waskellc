@@ -19,4 +19,4 @@ applyFlip :: Int -> (Int -> Int -> Int) -> (Int -> Int);
 applyFlip x f = f x;
 
 main :: Int;
-main = (apply add 1 2) + (apply1of2 1 add' 2) + (apply' add' 1 2);
+main = (apply add 1 2) + (applyFlip 1 add' 2) + (apply' add' 1 2);
