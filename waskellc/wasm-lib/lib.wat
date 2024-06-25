@@ -49,6 +49,29 @@
     (local.get $a)
   )
 
+  (func $add_to_pap (export "add_to_pap") (param $pap i32) (param $val i32)
+    (local $n_left i32)
+    (local $pap_env_cursor i32)
+
+    (if (i32.eq (i32.load offset=4 (local.get $pap)) (i32.const 0)) ;; trap if n_left is 0
+      (then
+        (unreachable)))
+
+    (local.set $pap_env_cursor
+      (i32.add
+        (i32.load offset=12 (local.get $pap))  ;; load the pap's env
+        (i32.load offset=8 (local.get $pap)))) ;; add the offset of where to add the param
+    (i32.store (local.get $pap_env_cursor) (local.get $val))
+    (i32.store offset=4 (local.get $pap) ;; decrement n_left
+      (i32.sub
+        (i32.load offset=4 (local.get $pap)) ;; n_left
+        (i32.const 1)))
+    (i32.store offset=8 (local.get $pap) ;; increment offset
+      (i32.add
+        (i32.load offset=8 (local.get $pap)) ;; offset
+        (i32.const 4)))
+  )
+
   (func $make_thunk_from_pap (export "make_thunk_from_pap") (param $pap i32) (param $env i32) (result i32)
     (local $thunk i32)
     (local $n_left i32)

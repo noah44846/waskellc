@@ -838,7 +838,7 @@ The standard library of the functional language is a subset of the Haskell stand
 // - apply function generation because the type of the function being called indirectly is not known
 // - wasm_encode crate relies on order of functions in the module to be correct and that is a challenge to maintain
 // - merge the wasm-lib
-// - the apply function again but this time more generic (not only integer arguments) / unit type issues in general
+// - the apply function again but this time more generic (not only integer arguments) / unit type issues in general -> if import always remove return on unit, if export only remove for wrapper, else never remove
 // - The representing of PAPs at the top level for code generation
 
 = Evaluation

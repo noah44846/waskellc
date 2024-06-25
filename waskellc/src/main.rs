@@ -14,22 +14,41 @@ struct Args {
     #[arg(short, long, default_value = None)]
     output: Option<PathBuf>,
 
-    #[arg(short = 'L', long)]
+    #[arg(short = 'd', long)]
+    debug: bool,
+
+    #[arg(requires("debug"), short = 'L', long, help = "Print lexer output")]
     debug_lexer: bool,
 
-    #[arg(short = 'A', long)]
+    #[arg(requires("debug"), short = 'A', long, help = "Print AST")]
     debug_ast: bool,
 
-    #[arg(short = 'S', long)]
+    #[arg(requires("debug"), short = 'S', long, help = "Print symbol table")]
     debug_symbols: bool,
 
-    #[arg(short = 'D', long)]
+    #[arg(
+        requires("debug"),
+        short = 'D',
+        long,
+        help = "Print desugared symbol table"
+    )]
     debug_desugar: bool,
 
-    #[arg(short = 'W', long)]
+    #[arg(
+        requires("debug"),
+        short = 'W',
+        long,
+        help = "Print WAT output of wasm module"
+    )]
     debug_wasm: bool,
 
-    #[arg(long)]
+    #[arg(
+        requires("debug_wasm"),
+        short = 's',
+        long,
+        default_value = "false",
+        help = "Show offsets in WAT output"
+    )]
     show_wasm_offsets: bool,
 
     #[arg(long, default_value = "false")]

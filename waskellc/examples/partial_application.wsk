@@ -1,22 +1,29 @@
 foreign export wasm add :: Int -> Int -> Int;
 add = (+);
 
-plusOne :: Int -> Int;
+foreign export wasm plusOne :: Int -> Int;
 plusOne = (+) 1;
 
-add' :: Int -> Int -> Int;
+foreign export wasm add' :: Int -> Int -> Int;
 add' x = (+) x;
 
-apply :: (Int -> Int -> Int) -> Int -> Int -> Int;
-apply f x y = ((f) x) y;
+apply1 :: (Int -> Int) -> Int -> Int;
+apply1 f = f;
+
+apply2 :: (Int -> Int -> Int) -> Int -> Int -> Int;
+apply2 f x y = ((f) x) y;
 -- equivalent to: f x y
 
-apply' :: (Int -> Int -> Int) -> Int -> Int -> Int;
-apply' f = f;
+apply2' :: (Int -> Int -> Int) -> Int -> Int -> Int;
+apply2' f = f;
 
-applyFlip :: Int -> (Int -> Int -> Int) -> (Int -> Int);
+apply2Flip :: Int -> (Int -> Int -> Int) -> (Int -> Int);
 -- equivalent to: Int -> (Int -> Int -> Int) -> Int -> Int
-applyFlip x f = f x;
+apply2Flip x f = f x;
+
+apply2With2 :: (Int -> Int -> Int) -> Int -> Int;
+apply2With2 f = apply1 (f 2);
 
 main :: Int;
-main = (apply add 1 2) + (applyFlip 1 add' 2) + (apply' add' 1 2);
+-- 3 + 3 + 3 + 3 + 3 + 3 = 18
+main = (apply2 add 1 2) + (apply2Flip 1 add' 2) + (apply2' (*) (-3) (-1)) + (plusOne 2) + (apply1 (add 1) 2) + (apply2With2 add 1);

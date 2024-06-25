@@ -48,7 +48,6 @@ impl CodeGen {
                 termcolor::ColorChoice::Always,
             ));
 
-            print!("WAT output: ");
             config
                 .print(&wasm_bytes, &mut printer)
                 .map_err(|e| e.to_string())?;
@@ -64,6 +63,10 @@ impl CodeGen {
         let arg_1_int32_ret_int32 = self
             .function_types
             .function_type_idx(vec![ValType::I32], Some(ValType::I32))
+            .unwrap();
+        let arg_2_int32_no_ret = self
+            .function_types
+            .function_type_idx(vec![ValType::I32; 2], None)
             .unwrap();
         let arg_2_int32_ret_int32 = self
             .function_types
@@ -87,6 +90,7 @@ impl CodeGen {
             },
         );
 
+        // TODO: fix naming collisions with the imported functions
         imports
             .import_func("lib", "eval", arg_1_int32_ret_int32)
             .unwrap();
@@ -98,6 +102,9 @@ impl CodeGen {
             .unwrap();
         imports
             .import_func("lib", "make_pap", arg_4_int32_ret_int32)
+            .unwrap();
+        imports
+            .import_func("lib", "add_to_pap", arg_2_int32_no_ret)
             .unwrap();
         imports
             .import_func("lib", "make_thunk_from_pap", arg_2_int32_ret_int32)
@@ -172,8 +179,14 @@ impl CodeGen {
     fn func_ty_idx_from_symbol(
         &mut self,
         symbol: &validator::Symbol,
-        check_for_export: bool,
+        remove_return_when_unit: bool,
     ) -> Result<u32, String> {
+        let remove_return_when_unit = if remove_return_when_unit {
+            None
+        } else {
+            Some(ValType::I32)
+        };
+
         let (params, return_ty) = match &symbol.ty {
             validator::Type::Function(func_params) => {
                 // put the last element of the params as the result and the rest as the params
@@ -184,24 +197,13 @@ impl CodeGen {
                 let params = vec![ValType::I32; func_params.len() - 1];
 
                 let return_ty = if let validator::Type::Unit = func_params.last().unwrap() {
-                    if check_for_export && (symbol.is_imported() || symbol.is_exported()) {
-                        None
-                    } else {
-                        Some(ValType::I32)
-                    }
+                    remove_return_when_unit
                 } else {
                     Some(ValType::I32)
                 };
                 (params, return_ty)
             }
-            validator::Type::Unit => (
-                vec![],
-                if check_for_export && (symbol.is_imported() || symbol.is_exported()) {
-                    None
-                } else {
-                    Some(ValType::I32)
-                },
-            ),
+            validator::Type::Unit => (vec![], remove_return_when_unit),
             _ => (vec![], Some(ValType::I32)),
         };
 
@@ -249,7 +251,7 @@ impl CodeGen {
             symbol.name
         ))?;
 
-        self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs)?;
+        self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs, &symbol.ty)?;
 
         fn add_function_to_code_section(
             code_section: &mut CodeSection,
@@ -407,10 +409,22 @@ impl CodeGen {
         expr: &validator::Expression,
         locals: &mut Vec<ValType>,
         instrs: &mut Vec<Instruction>,
+        parent_ty: &validator::Type,
     ) -> Result<(), String> {
         match expr {
             validator::Expression::LambdaAbstraction(syms, body) => {
-                let local_idx = self.generate_instructions_for_expr(syms, body, locals, instrs)?;
+                let tys = if let validator::Type::Function(tys) = parent_ty {
+                    tys
+                } else {
+                    unreachable!();
+                };
+                let typed_params = syms
+                    .iter()
+                    .map(|s| s.as_str())
+                    .zip(tys.iter())
+                    .collect::<Vec<_>>();
+                let local_idx =
+                    self.generate_instructions_for_expr(&typed_params, body, locals, instrs)?;
                 instrs.push(Instruction::LocalGet(local_idx));
                 instrs.push(Instruction::End);
             }
@@ -460,7 +474,7 @@ impl CodeGen {
 
     fn generate_instructions_for_expr(
         &mut self,
-        context: &[String],
+        context: &[(&str, &validator::Type)],
         expr: &validator::Expression,
         locals: &mut Vec<ValType>,
         instrs: &mut Vec<Instruction>,
@@ -477,7 +491,7 @@ impl CodeGen {
                     local_idx as u32,
                     context,
                     &sym.as_ref().borrow(),
-                    params,
+                    &params[1..],
                 ),
                 validator::Expression::FunctionParameter(name) => self.make_thunk_from_func_param(
                     instrs,
@@ -485,7 +499,7 @@ impl CodeGen {
                     local_idx as u32,
                     context,
                     name,
-                    params,
+                    &params[1..],
                 ),
                 validator::Expression::LambdaAbstraction(_params, _body) => {
                     todo!("Lambda abstraction as function application")
@@ -493,23 +507,48 @@ impl CodeGen {
                 _ => unreachable!(),
             },
             validator::Expression::FunctionParameter(name) => {
-                let sym_idx = context.iter().position(|s| s == name).ok_or(format!(
+                let sym_idx = context.iter().position(|(s, _)| s == name).ok_or(format!(
                     "Symbol {} not accessible in the lambda abstraction",
                     name
                 ))?;
                 Ok(sym_idx as u32)
             }
-            validator::Expression::Symbol(_sym) => {
-                //TODO: function as value
-                //let sym_ref = (**sym).borrow();
-                //let func_idx = functions.table_index(&sym_ref.name).ok_or(format!(
-                //"Function {} not found in the function table",
-                //sym_ref.name
-                //))?;
+            validator::Expression::Symbol(sym) => {
+                let make_pap_idx = functions
+                    .function_index("make_pap")
+                    .ok_or("Function make_pap not found in the function table")?;
 
-                //instrs.push(Instruction::I32Const(func_idx as i32));
-                //Ok(local_idx as u32)
-                todo!()
+                let sym = sym.as_ref().borrow();
+                let (name, remove_return_when_unit) = if sym.import_module_name() == Some("foreign")
+                {
+                    (format!("imported_{}", &sym.name), true)
+                } else {
+                    (sym.name.clone(), false)
+                };
+
+                let sym_tbl_idx = functions
+                    .table_index(&name)
+                    .ok_or(format!("Function {} not found in the function table", name))?;
+                let sym_ty_idx = self.func_ty_idx_from_symbol(&sym, remove_return_when_unit)?;
+                let total_params = sym.arity();
+
+                self.make_env_wrapper(
+                    context,
+                    locals,
+                    instrs,
+                    local_idx as u32,
+                    Some(sym_tbl_idx),
+                    &[],
+                )?;
+
+                instrs.push(Instruction::I32Const(sym_ty_idx as i32)); // function type index
+                instrs.push(Instruction::I32Const(total_params as i32)); // number of params
+                instrs.push(Instruction::I32Const(0)); // number of applied params
+                instrs.push(Instruction::LocalGet(local_idx as u32)); // env pointer
+                instrs.push(Instruction::Call(make_pap_idx));
+
+                instrs.push(Instruction::LocalSet(local_idx as u32));
+                Ok(local_idx as u32)
             }
             validator::Expression::IntLiteral(val) => {
                 let make_val_idx = functions
@@ -525,62 +564,100 @@ impl CodeGen {
         }
     }
 
-    fn make_thunk_from_symbol(
+    fn make_env_wrapper(
         &mut self,
-        instrs: &mut Vec<Instruction>,
+        context: &[(&str, &validator::Type)],
         locals: &mut Vec<ValType>,
+        instrs: &mut Vec<Instruction>,
         local_idx: u32,
-        context: &[String],
-        func: &validator::Symbol,
+        func_idx: Option<u32>,
         params: &[validator::Expression],
-    ) -> Result<u32, String> {
-        let num_params = params.len() - 1;
-
-        let functions = self.functions.as_mut().unwrap();
-        let make_env_idx = functions
+    ) -> Result<(), String> {
+        let make_env_idx = self
+            .functions
+            .as_mut()
+            .unwrap()
             .function_index("make_env")
-            .ok_or("Function make_env not found in the function table")?;
-        let make_thunk_idx = functions
-            .function_index("make_thunk")
-            .ok_or("Function make_thunk not found in the function table")?;
+            .expect("Function make_env not found in the function table");
 
-        let name = if func.import_module_name() == Some("foreign") {
-            format!("imported_{}", &func.name)
-        } else {
-            func.name.clone()
-        };
-        let func_tbl_idx = functions
-            .table_index(&name)
-            .ok_or(format!("Function {} not found in the function table", name))?;
-        let func_ty_idx = self.func_ty_idx_from_symbol(func, !func.is_exported())?;
-
-        instrs.push(Instruction::I32Const(num_params as i32));
+        instrs.push(Instruction::I32Const(params.len() as i32));
         instrs.push(Instruction::Call(make_env_idx));
         instrs.push(Instruction::LocalSet(local_idx));
 
-        instrs.push(Instruction::LocalGet(local_idx));
-        instrs.push(Instruction::I32Const(func_tbl_idx as i32));
-        instrs.push(Instruction::I32Store(MemArg {
-            align: 2,
-            offset: 0,
-            memory_index: 0,
-        }));
+        if let Some(func_idx) = func_idx {
+            instrs.push(Instruction::LocalGet(local_idx));
+            instrs.push(Instruction::I32Const(func_idx as i32));
+            instrs.push(Instruction::I32Store(MemArg {
+                align: 2,
+                offset: 0,
+                memory_index: 0,
+            }));
+        };
 
-        for (i, param) in params.iter().skip(1).enumerate() {
+        for (i, param) in params.iter().enumerate() {
             let rec_local_idx =
                 self.generate_instructions_for_expr(context, param, locals, instrs)?;
             instrs.push(Instruction::LocalGet(local_idx));
             instrs.push(Instruction::LocalGet(rec_local_idx));
             instrs.push(Instruction::I32Store(MemArg {
                 align: 2,
-                offset: ((i + 1) * 4) as u64,
+                offset: ((i + if func_idx.is_none() { 0 } else { 1 }) * 4) as u64,
                 memory_index: 0,
             }));
         }
 
-        instrs.push(Instruction::I32Const(func_ty_idx as i32));
-        instrs.push(Instruction::LocalGet(local_idx));
-        instrs.push(Instruction::Call(make_thunk_idx));
+        Ok(())
+    }
+
+    fn make_thunk_from_symbol(
+        &mut self,
+        instrs: &mut Vec<Instruction>,
+        locals: &mut Vec<ValType>,
+        local_idx: u32,
+        context: &[(&str, &validator::Type)],
+        func: &validator::Symbol,
+        params: &[validator::Expression],
+    ) -> Result<u32, String> {
+        let num_params = params.len();
+
+        let functions = self.functions.as_mut().unwrap();
+        let make_thunk_idx = functions
+            .function_index("make_thunk")
+            .ok_or("Function make_thunk not found in the function table")?;
+        let make_pap_idx = functions
+            .function_index("make_pap")
+            .ok_or("Function make_pap not found in the function table")?;
+
+        let (name, remove_return_when_unit) = if func.import_module_name() == Some("foreign") {
+            (format!("imported_{}", &func.name), true)
+        } else {
+            (func.name.clone(), false)
+        };
+        let func_tbl_idx = functions
+            .table_index(&name)
+            .ok_or(format!("Function {} not found in the function table", name))?;
+        let func_ty_idx = self.func_ty_idx_from_symbol(func, remove_return_when_unit)?;
+
+        self.make_env_wrapper(
+            context,
+            locals,
+            instrs,
+            local_idx,
+            Some(func_tbl_idx),
+            params,
+        )?;
+
+        if num_params != func.arity().into() {
+            instrs.push(Instruction::I32Const(func_ty_idx as i32));
+            instrs.push(Instruction::I32Const(func.arity().into()));
+            instrs.push(Instruction::I32Const(num_params as i32));
+            instrs.push(Instruction::LocalGet(local_idx));
+            instrs.push(Instruction::Call(make_pap_idx));
+        } else {
+            instrs.push(Instruction::I32Const(func_ty_idx as i32));
+            instrs.push(Instruction::LocalGet(local_idx));
+            instrs.push(Instruction::Call(make_thunk_idx));
+        }
         instrs.push(Instruction::LocalSet(local_idx));
 
         Ok(local_idx)
@@ -591,44 +668,47 @@ impl CodeGen {
         instrs: &mut Vec<Instruction>,
         locals: &mut Vec<ValType>,
         local_idx: u32,
-        context: &[String],
+        context: &[(&str, &validator::Type)],
         func_name: &str,
         params: &[validator::Expression],
     ) -> Result<u32, String> {
-        let num_params = params.len() - 1;
-
         let functions = self.functions.as_ref().unwrap();
-        let make_env_idx = functions
-            .function_index("make_env")
-            .ok_or("Function make_env not found in the function table")?;
         let make_thunk_from_pap_idx = functions
             .function_index("make_thunk_from_pap")
             .ok_or("Function make_thunk_from_pap not found in the function table")?;
+        let add_to_pap_idx = functions
+            .function_index("add_to_pap")
+            .ok_or("Function add_to_pap not found in the function table")?;
 
-        let pap_local_idx = context.iter().position(|s| s == func_name).ok_or(format!(
-            "Function {} not found in the lambda abstraction",
-            func_name
-        ))?;
+        let pap_local_idx = context
+            .iter()
+            .position(|(s, _)| *s == func_name)
+            .ok_or(format!(
+                "Function {} not found in the lambda abstraction",
+                func_name
+            ))?;
+        let pap_tys = if let validator::Type::Function(tys) = context[pap_local_idx].1 {
+            tys
+        } else {
+            unreachable!()
+        };
 
-        instrs.push(Instruction::I32Const(num_params as i32));
-        instrs.push(Instruction::Call(make_env_idx));
-        instrs.push(Instruction::LocalSet(local_idx));
+        if pap_tys.len() - 1 != params.len() {
+            for param in params {
+                let rec_local_idx =
+                    self.generate_instructions_for_expr(context, param, locals, instrs)?;
+                instrs.push(Instruction::LocalGet(pap_local_idx as u32));
+                instrs.push(Instruction::LocalGet(rec_local_idx));
+                instrs.push(Instruction::Call(add_to_pap_idx));
+                instrs.push(Instruction::LocalGet(pap_local_idx as u32));
+            }
+        } else {
+            self.make_env_wrapper(context, locals, instrs, local_idx, None, params)?;
 
-        for (i, param) in params.iter().skip(1).enumerate() {
-            let rec_local_idx =
-                self.generate_instructions_for_expr(context, param, locals, instrs)?;
+            instrs.push(Instruction::LocalGet(pap_local_idx as u32));
             instrs.push(Instruction::LocalGet(local_idx));
-            instrs.push(Instruction::LocalGet(rec_local_idx));
-            instrs.push(Instruction::I32Store(MemArg {
-                align: 2,
-                offset: (i * 4) as u64,
-                memory_index: 0,
-            }));
+            instrs.push(Instruction::Call(make_thunk_from_pap_idx));
         }
-
-        instrs.push(Instruction::LocalGet(pap_local_idx as u32));
-        instrs.push(Instruction::LocalGet(local_idx));
-        instrs.push(Instruction::Call(make_thunk_from_pap_idx));
         instrs.push(Instruction::LocalSet(local_idx));
 
         Ok(local_idx)
