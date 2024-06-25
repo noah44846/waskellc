@@ -19,7 +19,11 @@ struct CodeGen {
 }
 
 impl CodeGen {
-    fn generate(symbol_table: validator::SymbolTable, debug: bool) -> Result<Vec<u8>, String> {
+    fn generate(
+        symbol_table: validator::SymbolTable,
+        print_wasm: bool,
+        show_offset: bool,
+    ) -> Result<Vec<u8>, String> {
         let symbol_table = Rc::new(symbol_table);
 
         let mut res = CodeGen {
@@ -35,11 +39,19 @@ impl CodeGen {
         let module = res.generate_functions()?;
         let wasm_bytes = module.finish();
 
-        if debug {
-            println!(
-                "WAT output: {}",
-                wasmprinter::print_bytes(&wasm_bytes).map_err(|e| e.to_string())?
-            );
+        if print_wasm {
+            let mut config = wasmprinter::Config::new();
+            config.print_offsets(show_offset);
+            config.name_unnamed(true);
+
+            let mut printer = wasmprinter::PrintTermcolor(termcolor::StandardStream::stdout(
+                termcolor::ColorChoice::Always,
+            ));
+
+            print!("WAT output: ");
+            config
+                .print(&wasm_bytes, &mut printer)
+                .map_err(|e| e.to_string())?;
         }
 
         wasmparser::validate(&wasm_bytes).map_err(|e| e.to_string())?;
@@ -684,6 +696,10 @@ impl CodeGen {
     }
 }
 
-pub fn generate_code(symbol_table: validator::SymbolTable, debug: bool) -> Result<Vec<u8>, String> {
-    CodeGen::generate(symbol_table, debug)
+pub fn generate_code(
+    symbol_table: validator::SymbolTable,
+    print_wasm: bool,
+    show_offset: bool,
+) -> Result<Vec<u8>, String> {
+    CodeGen::generate(symbol_table, print_wasm, show_offset)
 }

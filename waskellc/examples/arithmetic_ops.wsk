@@ -4,10 +4,10 @@ add3 x y z = x + y + z;
 foreign export wasm avg3 :: Int -> Int -> Int -> Int;
 avg3 x y z = (x + y + z) / 3;
 
-foreign export wasm subst3 :: Int -> Int -> Int -> Int;
+foreign export wasm sub3 :: Int -> Int -> Int -> Int;
 sub3 x y z = (x - y) - z;
 
-foreign export wasm subst3' :: Int -> Int -> Int -> Int;
+foreign export wasm sub3' :: Int -> Int -> Int -> Int;
 sub3' x y z = x + (-y) + (-z);
 
 main :: Int;

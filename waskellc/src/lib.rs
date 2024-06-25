@@ -13,8 +13,9 @@ pub fn compile(
     debug_symbols: bool,
     debug_desugar: bool,
     debug_wasm: bool,
+    show_wasm_offsets: bool,
 ) -> Result<Vec<u8>, String> {
     let ast = ast_gen::parse(file_contents, debug_lexer, debug_ast)?;
     let symbol_table = validator::validate(ast, debug_symbols, debug_desugar)?;
-    code_gen::generate_code(symbol_table, debug_wasm)
+    code_gen::generate_code(symbol_table, debug_wasm, show_wasm_offsets)
 }

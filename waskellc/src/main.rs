@@ -11,26 +11,29 @@ use waskellc::compile;
 struct Args {
     input: PathBuf,
 
-    #[clap(short, long, default_value = None)]
+    #[arg(short, long, default_value = None)]
     output: Option<PathBuf>,
 
-    #[clap(short = 'L', long)]
+    #[arg(short = 'L', long)]
     debug_lexer: bool,
 
-    #[clap(short = 'A', long)]
+    #[arg(short = 'A', long)]
     debug_ast: bool,
 
-    #[clap(short = 'S', long)]
+    #[arg(short = 'S', long)]
     debug_symbols: bool,
 
-    #[clap(short = 'D', long)]
+    #[arg(short = 'D', long)]
     debug_desugar: bool,
 
-    #[clap(short = 'W', long)]
+    #[arg(short = 'W', long)]
     debug_wasm: bool,
 
-    #[clap(short = 'm', long, default_value = "true")]
-    debug_merge: bool,
+    #[arg(long)]
+    show_wasm_offsets: bool,
+
+    #[arg(long, default_value = "false")]
+    no_merge: bool,
 }
 
 fn out_path(in_path: PathBuf) -> PathBuf {
@@ -87,11 +90,12 @@ fn main() -> Result<(), String> {
         args.debug_symbols,
         args.debug_desugar,
         args.debug_wasm,
+        args.show_wasm_offsets,
     )?;
 
     fs::write(&out_path, module_bytes).unwrap();
 
-    if args.debug_merge {
+    if !args.no_merge {
         merge_command(out_path)
     } else {
         Ok(())
