@@ -96,7 +96,7 @@ fn merge_command(out_path: PathBuf) -> Result<(), String> {
     }
 }
 
-fn main() -> Result<(), String> {
+fn main() {
     let args = Args::parse();
 
     let file_contents = fs::read_to_string(&args.input).unwrap();
@@ -110,13 +110,21 @@ fn main() -> Result<(), String> {
         args.debug_desugar,
         args.debug_wasm,
         args.show_wasm_offsets,
-    )?;
+    );
+
+    let module_bytes = if let Ok(module_bytes) = module_bytes {
+        module_bytes
+    } else {
+        eprintln!("{}", module_bytes.unwrap_err());
+        std::process::exit(1);
+    };
 
     fs::write(&out_path, module_bytes).unwrap();
 
     if !args.no_merge {
-        merge_command(out_path)
-    } else {
-        Ok(())
+        merge_command(out_path.clone()).unwrap_or_else(|e| {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        });
     }
 }

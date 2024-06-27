@@ -92,25 +92,25 @@ impl CodeGen {
 
         // TODO: fix naming collisions with the imported functions
         imports
-            .import_func("lib", "eval", arg_1_int32_ret_int32)
+            .import_func("lib", ":eval", arg_1_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", "make_env", arg_1_int32_ret_int32)
+            .import_func("lib", ":make_env", arg_1_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", "make_thunk", arg_2_int32_ret_int32)
+            .import_func("lib", ":make_thunk", arg_2_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", "make_pap", arg_4_int32_ret_int32)
+            .import_func("lib", ":make_pap", arg_4_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", "add_to_pap", arg_2_int32_no_ret)
+            .import_func("lib", ":add_to_pap", arg_2_int32_no_ret)
             .unwrap();
         imports
-            .import_func("lib", "make_thunk_from_pap", arg_2_int32_ret_int32)
+            .import_func("lib", ":make_thunk_from_pap", arg_2_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", "make_val", arg_1_int32_ret_int32)
+            .import_func("lib", ":make_val", arg_1_int32_ret_int32)
             .unwrap();
 
         self.symbol_table
@@ -228,7 +228,7 @@ impl CodeGen {
         // TODO: consider more elegant way to handle the order in which the functions are added (function section and code section have to be in the same order)
         if symbol.is_exported() {
             let func_type = self.func_ty_idx_from_symbol(symbol, true)?;
-            let exported_func_name = format!("exported_{}", symbol.name);
+            let exported_func_name = format!(":exported_{}", symbol.name);
             self.functions
                 .as_mut()
                 .unwrap()
@@ -298,7 +298,7 @@ impl CodeGen {
         sym: &validator::Symbol,
         instrs: &mut Vec<Instruction>,
     ) -> Result<(), String> {
-        let exported_func_name = format!("exported_{}", &sym.name);
+        let exported_func_name = format!(":exported_{}", &sym.name);
         self.functions
             .as_mut()
             .unwrap()
@@ -313,10 +313,10 @@ impl CodeGen {
             .function_index(&sym.name)
             .ok_or(format!("Function {} not found", sym.name))?;
         let eval_idx = functions
-            .function_index("eval")
+            .function_index(":eval")
             .ok_or("Function eval not found in the function table")?;
         let make_val_idx = functions
-            .function_index("make_val")
+            .function_index(":make_val")
             .ok_or("Function make_val not found in the function table")?;
 
         match &sym.ty {
@@ -353,7 +353,7 @@ impl CodeGen {
 
     fn generate_foreign_import_wrapper(&mut self, sym: &validator::Symbol) -> Result<(), String> {
         let mut instrs = vec![];
-        let func_name = format!("imported_{}", &sym.name);
+        let func_name = format!(":imported_{}", &sym.name);
 
         let wrapper_ty_idx = self.func_ty_idx_from_symbol(sym, true)?;
 
@@ -367,10 +367,10 @@ impl CodeGen {
             .function_index(&sym.name)
             .ok_or(format!("Function {} not found", sym.name))?;
         let make_val_idx = functions
-            .function_index("make_val")
+            .function_index(":make_val")
             .ok_or("Function make_val not found in the function table")?;
         let eval_idx = functions
-            .function_index("eval")
+            .function_index(":eval")
             .ok_or("Function eval not found in the function table")?;
 
         for i in 0..sym.arity() {
@@ -458,7 +458,7 @@ impl CodeGen {
                     .functions
                     .as_mut()
                     .unwrap()
-                    .function_index("make_val")
+                    .function_index(":make_val")
                     .ok_or("Function make_val not found in the function table")?;
 
                 instrs.push(Instruction::I32Const(*val as i32));
@@ -501,9 +501,7 @@ impl CodeGen {
                     name,
                     &params[1..],
                 ),
-                validator::Expression::LambdaAbstraction(_params, _body) => {
-                    todo!("Lambda abstraction as function application")
-                }
+                validator::Expression::LambdaAbstraction(_params, _body) => unimplemented!(),
                 _ => unreachable!(),
             },
             validator::Expression::FunctionParameter(name) => {
@@ -515,13 +513,13 @@ impl CodeGen {
             }
             validator::Expression::Symbol(sym) => {
                 let make_pap_idx = functions
-                    .function_index("make_pap")
+                    .function_index(":make_pap")
                     .ok_or("Function make_pap not found in the function table")?;
 
                 let sym = sym.as_ref().borrow();
                 let (name, remove_return_when_unit) = if sym.import_module_name() == Some("foreign")
                 {
-                    (format!("imported_{}", &sym.name), true)
+                    (format!(":imported_{}", &sym.name), true)
                 } else {
                     (sym.name.clone(), false)
                 };
@@ -552,7 +550,7 @@ impl CodeGen {
             }
             validator::Expression::IntLiteral(val) => {
                 let make_val_idx = functions
-                    .function_index("make_val")
+                    .function_index(":make_val")
                     .ok_or("Function make_val not found in the function table")?;
 
                 instrs.push(Instruction::I32Const(*val as i32));
@@ -560,7 +558,17 @@ impl CodeGen {
                 instrs.push(Instruction::LocalSet(local_idx as u32));
                 Ok(local_idx as u32)
             }
-            _ => todo!(),
+            validator::Expression::UnitValue => {
+                let make_val_idx = functions
+                    .function_index(":make_val")
+                    .ok_or("Function make_val not found in the function table")?;
+
+                instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::Call(make_val_idx));
+                instrs.push(Instruction::LocalSet(local_idx as u32));
+                Ok(local_idx as u32)
+            }
+            _ => todo!("Expression not supported or not implemented"),
         }
     }
 
@@ -577,7 +585,7 @@ impl CodeGen {
             .functions
             .as_mut()
             .unwrap()
-            .function_index("make_env")
+            .function_index(":make_env")
             .expect("Function make_env not found in the function table");
 
         instrs.push(Instruction::I32Const(params.len() as i32));
@@ -622,14 +630,14 @@ impl CodeGen {
 
         let functions = self.functions.as_mut().unwrap();
         let make_thunk_idx = functions
-            .function_index("make_thunk")
+            .function_index(":make_thunk")
             .ok_or("Function make_thunk not found in the function table")?;
         let make_pap_idx = functions
-            .function_index("make_pap")
+            .function_index(":make_pap")
             .ok_or("Function make_pap not found in the function table")?;
 
         let (name, remove_return_when_unit) = if func.import_module_name() == Some("foreign") {
-            (format!("imported_{}", &func.name), true)
+            (format!(":imported_{}", &func.name), true)
         } else {
             (func.name.clone(), false)
         };
@@ -674,10 +682,10 @@ impl CodeGen {
     ) -> Result<u32, String> {
         let functions = self.functions.as_ref().unwrap();
         let make_thunk_from_pap_idx = functions
-            .function_index("make_thunk_from_pap")
+            .function_index(":make_thunk_from_pap")
             .ok_or("Function make_thunk_from_pap not found in the function table")?;
         let add_to_pap_idx = functions
-            .function_index("add_to_pap")
+            .function_index(":add_to_pap")
             .ok_or("Function add_to_pap not found in the function table")?;
 
         let pap_local_idx = context
@@ -718,7 +726,7 @@ impl CodeGen {
         let functions = self.functions.as_mut().unwrap();
 
         let make_val_idx = functions
-            .function_index("make_val")
+            .function_index(":make_val")
             .expect("Function make_val not found");
 
         let apply_ty_idx = self
@@ -728,7 +736,7 @@ impl CodeGen {
         // DeclaredWasmFunctions insures that the apply function has table index 0 so that it can
         // be called by eval
         let apply_func_idx = functions
-            .add_function("apply", apply_ty_idx)
+            .add_function(":apply", apply_ty_idx)
             .expect("Function apply already exists");
 
         let mut instrs = vec![];

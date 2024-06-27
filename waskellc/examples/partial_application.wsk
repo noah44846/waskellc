@@ -7,21 +7,22 @@ plusOne = (+) 1;
 foreign export wasm add' :: Int -> Int -> Int;
 add' x = (+) x;
 
-apply1 :: (Int -> Int) -> Int -> Int;
+apply1 :: (a -> b) -> a -> b;
 apply1 f = f;
 
-apply2 :: (Int -> Int -> Int) -> Int -> Int -> Int;
+apply2 :: (a -> b -> c) -> a -> b -> c;
 apply2 f x y = ((f) x) y;
 -- equivalent to: f x y
 
-apply2' :: (Int -> Int -> Int) -> Int -> Int -> Int;
+apply2' :: (a -> b -> c) -> a -> b -> c;
 apply2' f = f;
 
-apply2Flip :: Int -> (Int -> Int -> Int) -> (Int -> Int);
--- equivalent to: Int -> (Int -> Int -> Int) -> Int -> Int
+apply2Flip :: a -> (a -> b -> c) -> (b -> c);
+-- equivalent to: a -> (a -> b -> c) -> b -> c
 apply2Flip x f = f x;
 
-apply2With2 :: (Int -> Int -> Int) -> Int -> Int;
+-- check that if you replace the Int with a type variable, it fails
+apply2With2 :: (Int -> b -> c) -> b -> c;
 apply2With2 f = apply1 (f 2);
 
 main :: Int;

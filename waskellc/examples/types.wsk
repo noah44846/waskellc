@@ -1,0 +1,8 @@
+--data Bool = True | False;
+
+--data Maybe a = Just a | Nothing;
+
+--data List a = Nil | Cons a (List a);
+
+foreign export wasm consume :: Int -> ();
+consume x = ();

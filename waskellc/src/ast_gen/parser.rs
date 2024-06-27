@@ -198,7 +198,7 @@ pub enum TypeApplicationElement {
     //FunctionConstructor,
     //ListType(Box<Type>),
     //TupleType(Vec<Type>),
-    //TypeVariable(String),
+    TypeVariable(String),
     ParenthesizedType(Box<FunctionType>),
     TypeConstructor(String),
 }
@@ -208,6 +208,10 @@ impl Type {
         match next_token(input, false)? {
             Token::ConstructorIdent(ident) => {
                 let elements = vec![TypeApplicationElement::TypeConstructor(ident)];
+                Ok(Type(elements))
+            }
+            Token::VariableIdent(ident) => {
+                let elements = vec![TypeApplicationElement::TypeVariable(ident)];
                 Ok(Type(elements))
             }
             Token::Special('(') => {
@@ -302,7 +306,7 @@ pub enum FunctionParameterPattern {
     //StringLiteral(String),
     //IntegerLiteral(i64),
     //CharLiteral(char),
-    //Wildcard,
+    Wildcard,
     //ParenthesizedPattern(Box<Pattern>),
     //TuplePattern(Vec<Pattern>),
     //ListPattern(Vec<Pattern>),
@@ -326,6 +330,7 @@ impl FunctionParameterPattern {
                     _ => Ok(AsPattern(ident, None)),
                 }
             }
+            Token::ReservedIdent(ident) if ident == "_" => Ok(Wildcard),
             t => Err(format!("Expected variable identifier, got {:?}", t)),
         }
     }
@@ -425,10 +430,7 @@ impl LeftHandSideExpression {
                 }
                 _ => Err(format!("Unexpected token for expression: {}", ident)),
             },
-            Token::ReservedOperator(op) if op == "\\" => {
-                input.next(); // consume the '\\'
-                todo!()
-            }
+            Token::ReservedOperator(op) if op == "\\" => unimplemented!("Lambda expressions"),
             _ => {
                 let mut params = vec![];
                 loop {
@@ -482,6 +484,10 @@ impl FunctionParameterExpression {
         match next_token(input, false)? {
             Token::VariableIdent(ident) => Ok(FunctionParameterExpression::Variable(ident)),
             Token::Special('(') => match next_token(input, true)? {
+                Token::Special(')') => {
+                    input.next(); // consume the ')'
+                    Ok(FunctionParameterExpression::Unit)
+                }
                 Token::VariableSym(op) if op != "-" => {
                     input.next(); // consume the operator
                     match next_token(input, false)? {

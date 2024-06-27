@@ -1,53 +1,239 @@
 // SPDX-License-Identifier: MIT
 
-use std::slice;
+use std::{collections::HashMap, fmt, slice};
+
+use itertools::Itertools;
 
 use crate::validator::symbol_check::*;
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+struct TypeVarAssignmentKey {
+    var_name: String,
+    ctx_symbol_name: String,
+}
+
+impl TryFrom<&Type> for TypeVarAssignmentKey {
+    type Error = String;
+
+    fn try_from(ty: &Type) -> Result<Self, Self::Error> {
+        match ty {
+            Type::TypeVar {
+                var_name,
+                ctx_symbol_name,
+            } => Ok(Self {
+                var_name: var_name.clone(),
+                ctx_symbol_name: ctx_symbol_name.clone(),
+            }),
+            _ => Err(format!("Can't convert {:?} to TypeVarAssignmentKey", ty)),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+struct TypeVarAssignmentValue {
+    ty: disjoint_sets::UnionFindNode<Type>,
+    concrete_ty: Option<Type>,
+}
+
+impl fmt::Debug for TypeVarAssignmentValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypeVarAssignmentValue")
+            .field("ty", &self.ty)
+            .field("concrete_ty", &self.concrete_ty)
+            .field("find", &self.ty.find())
+            .finish()
+    }
+}
+
+impl TryFrom<&Type> for TypeVarAssignmentValue {
+    type Error = String;
+
+    fn try_from(ty: &Type) -> Result<Self, Self::Error> {
+        match ty {
+            Type::TypeVar { .. } => Ok(Self {
+                ty: disjoint_sets::UnionFindNode::new(ty.clone()),
+                concrete_ty: None,
+            }),
+            _ => Err(format!("Can't convert {:?} to TypeVarAssignmentValue", ty)),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TypeVarAssignments(HashMap<TypeVarAssignmentKey, TypeVarAssignmentValue>);
+
+impl TypeVarAssignments {
+    fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    fn get(&self, ty: &Type) -> Option<&TypeVarAssignmentValue> {
+        self.0.get(&ty.try_into().unwrap())
+    }
+
+    fn assign_or_check(&mut self, ty1: &Type, ty2: &Type) -> bool {
+        match (ty1, ty2) {
+            (Type::TypeVar { .. }, Type::TypeVar { .. }) => {
+                let mut inner_ty1 = self
+                    .0
+                    .remove(&ty1.try_into().unwrap())
+                    .unwrap_or(ty1.try_into().unwrap());
+                let mut inner_ty2 = self
+                    .0
+                    .remove(&ty2.try_into().unwrap())
+                    .unwrap_or(ty2.try_into().unwrap());
+
+                let res = if inner_ty1.concrete_ty == inner_ty2.concrete_ty {
+                    inner_ty1.ty.union(&mut inner_ty2.ty);
+                    true
+                } else {
+                    false
+                };
+
+                self.0.insert(ty1.try_into().unwrap(), inner_ty1);
+                self.0.insert(ty2.try_into().unwrap(), inner_ty2);
+
+                res
+            }
+            (Type::TypeVar { .. }, Type::Function(_)) => {
+                let mut inner_ty1 = self
+                    .0
+                    .remove(&ty1.try_into().unwrap())
+                    .unwrap_or(ty1.try_into().unwrap());
+
+                let res = if let Some(concrete_ty) = &inner_ty1.concrete_ty {
+                    self.assign_or_check(concrete_ty, ty2)
+                } else {
+                    inner_ty1.concrete_ty = Some(ty2.clone());
+                    true
+                };
+
+                self.0.insert(ty1.try_into().unwrap(), inner_ty1);
+
+                res
+            }
+            (Type::TypeVar { .. }, _) => {
+                let mut inner_ty1 = self
+                    .0
+                    .remove(&ty1.try_into().unwrap())
+                    .unwrap_or(ty1.try_into().unwrap());
+
+                let res = if let Some(concrete_ty) = &inner_ty1.concrete_ty {
+                    self.assign_or_check(concrete_ty, ty2)
+                } else {
+                    inner_ty1.concrete_ty = Some(ty2.clone());
+                    true
+                };
+
+                self.0.insert(ty1.try_into().unwrap(), inner_ty1);
+
+                res
+            }
+            (_, Type::TypeVar { .. }) => self.assign_or_check(ty2, ty1),
+            (Type::Function(tys1), Type::Function(tys2)) => {
+                if tys1.len() != tys2.len() {
+                    return false;
+                }
+
+                tys1.iter()
+                    .zip(tys2.iter())
+                    .all(|(ty1, ty2)| self.assign_or_check(ty1, ty2))
+            }
+            _ => *ty1 == *ty2,
+        }
+    }
+
+    fn check(&self, ty1: &Type, ty2: &Type) -> bool {
+        match (ty1, ty2) {
+            (Type::TypeVar { .. }, Type::TypeVar { .. }) => {
+                if *ty1 == *ty2 {
+                    return true;
+                }
+
+                let inner_ty1 = self.get(ty1);
+                let inner_ty2 = self.get(ty2);
+
+                if inner_ty1.is_none() || inner_ty2.is_none() {
+                    return false;
+                }
+
+                let inner_ty1 = inner_ty1.unwrap();
+                let inner_ty2 = inner_ty2.unwrap();
+
+                if inner_ty1.concrete_ty.is_none() && inner_ty2.concrete_ty.is_none() {
+                    return inner_ty1.ty.find() == inner_ty2.ty.find();
+                }
+
+                inner_ty1.concrete_ty == inner_ty2.concrete_ty
+            }
+            (Type::TypeVar { .. }, _) => {
+                let inner_ty1 = self.get(ty1);
+
+                if inner_ty1.is_none() {
+                    return false;
+                }
+
+                let inner_ty1 = inner_ty1.unwrap();
+
+                if let Some(concrete_ty) = &inner_ty1.concrete_ty {
+                    self.check(concrete_ty, ty2)
+                } else {
+                    true
+                }
+            }
+            (_, Type::TypeVar { .. }) => self.check(ty2, ty1),
+            (Type::Function(tys1), Type::Function(tys2)) => {
+                if tys1.len() != tys2.len() {
+                    return false;
+                }
+
+                tys1.iter()
+                    .zip(tys2.iter())
+                    .all(|(ty1, ty2)| self.check(ty1, ty2))
+            }
+            _ => *ty1 == *ty2,
+        }
+    }
+}
+
 pub fn type_check_syms(symbol_table: &mut SymbolTable) -> Result<(), String> {
-    for symbol in symbol_table.values().cloned().collect::<Vec<_>>() {
-        type_check_sym(&mut symbol.as_ref().borrow_mut(), symbol_table)?;
+    for symbol in symbol_table.values() {
+        type_check_sym(&mut symbol.as_ref().borrow_mut())?;
     }
     Ok(())
 }
 
-fn type_check_sym(symbol: &mut Symbol, symbol_table: &mut SymbolTable) -> Result<(), String> {
+fn type_check_sym(symbol: &mut Symbol) -> Result<(), String> {
+    let is_imported = symbol.is_imported();
+    let is_exported = symbol.is_exported();
+
     if let Some(expr) = &mut symbol.expr {
-        let ty = type_check_top_level_expr(expr, &symbol.ty, symbol_table)
-            .map_err(|e| format!("Error type checking symbol {}: {}", symbol.name, e))?;
-
-        if symbol.ty != ty {
-            return Err(format!(
-                "Symbol {} has type {:?} but expression has type {:?}",
-                symbol.name, symbol.ty, ty
-            ));
-        }
-
-        let ty_slice: &[_] = if let Type::Function(ref tys) = ty {
+        let ty_slice: &[_] = if let Type::Function(ref tys) = symbol.ty {
             tys
         } else {
-            slice::from_ref(&ty)
+            slice::from_ref(&symbol.ty)
         };
 
-        if (symbol.is_imported() || symbol.is_exported())
+        if (is_imported || is_exported)
             && !ty_slice.iter().all(|ty| !matches!(ty, Type::Function(_)))
         {
             return Err(format!(
-                "Symbol {} has type {:?} which can't be exported",
+                "Symbol {} has type {:#?} which can't be exported",
                 symbol.name, symbol.ty
             ));
         }
+
+        type_check_top_level_expr(expr, &symbol.ty)
+            .map_err(|e| format!("Error type checking symbol {}:\n{}", symbol.name, e))?;
     }
     Ok(())
 }
 
-fn type_check_top_level_expr(
-    expr: &mut Expression,
-    parent_ty: &Type,
-    _symbol_table: &mut SymbolTable,
-) -> Result<Type, String> {
+fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<(), String> {
     let mut scope = vec![];
-    let res: Result<Type, String> = match expr {
+    let mut ty_var_assigns = TypeVarAssignments::new();
+
+    let res = match expr {
         Expression::FunctionApplication(exprs) => {
             if let Type::Function(tys) = parent_ty {
                 assert!(tys.len() > 1, "Parent type has to be flattened");
@@ -59,9 +245,9 @@ fn type_check_top_level_expr(
                 }
 
                 *expr = Expression::LambdaAbstraction(lambda_params, Box::new(expr.clone()));
-                type_check_top_level_expr(expr, parent_ty, _symbol_table)
+                return type_check_top_level_expr(expr, parent_ty);
             } else {
-                type_check_expr(expr, &mut scope, _symbol_table)
+                type_check_expr(expr, &mut scope, &mut ty_var_assigns)
             }
         }
         Expression::LambdaAbstraction(params, expr) => {
@@ -103,9 +289,10 @@ fn type_check_top_level_expr(
                         }
                         Expression::IntLiteral(_)
                         | Expression::StringLiteral(_)
-                        | Expression::CharLiteral(_) => {
+                        | Expression::CharLiteral(_)
+                        | Expression::UnitValue => {
                             Err(format!(
-                                "Lambda expression must be a function application but got {:?}",
+                                "Lambda expression must be a function application but got {:#?}",
                                 expr
                             ))?;
                         }
@@ -113,27 +300,78 @@ fn type_check_top_level_expr(
                 }
             }
 
-            let expr_ty = type_check_expr(expr, &mut scope, _symbol_table)?;
+            let mut ty_var_assigns = TypeVarAssignments::new();
+            let expr_ty = type_check_expr(expr, &mut scope, &mut ty_var_assigns)?;
 
-            let mut tys = func_tys.clone();
-            tys[func_tys.len() - 1] = expr_ty.clone();
-            Ok(Type::Function(tys))
+            if !ty_var_assigns.check(&func_tys[func_tys.len() - 1], &expr_ty) {
+                return Err(format!(
+                    "Lambda expression has return type {:#?} but parent has {:#?}",
+                    expr_ty,
+                    func_tys.last().unwrap()
+                ));
+            }
+
+            // collect all type vars from the function type recursively
+            fn collect_type_vars(ty: &Type) -> Vec<Type> {
+                match ty {
+                    Type::TypeVar { .. } => vec![ty.clone()],
+                    Type::Function(tys) => {
+                        tys.iter().flat_map(collect_type_vars).collect::<Vec<_>>()
+                    }
+                    _ => vec![],
+                }
+            }
+
+            // check if no type vars are in the same disjoint set and that they don't have a
+            // concrete type
+            let is_valid = collect_type_vars(&expr_ty)
+                .iter()
+                .unique()
+                .tuple_combinations()
+                .filter(|(ty1, ty2)| {
+                    ty_var_assigns.get(ty1).is_some() && ty_var_assigns.get(ty2).is_some()
+                })
+                .all(|(ty1, ty2)| {
+                    let inner_ty1 = ty_var_assigns.get(ty1).unwrap();
+                    let inner_ty2 = ty_var_assigns.get(ty2).unwrap();
+
+                    inner_ty1.concrete_ty.is_none()
+                        && inner_ty2.concrete_ty.is_none()
+                        && inner_ty1.ty.find() != inner_ty2.ty.find()
+                });
+
+            if !is_valid {
+                return Err(format!(
+                    "Lambda expression has type {:#?} with invalid type vars",
+                    expr_ty
+                ));
+            }
+
+            return Ok(());
         }
-        _ => type_check_expr(expr, &mut scope, _symbol_table),
-    };
+        _ => type_check_expr(expr, &mut scope, &mut ty_var_assigns),
+    }?;
 
-    flatten_function_ty(&res?)
+    if ty_var_assigns.check(parent_ty, &res.clone()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Expression has type {:#?} but parent type is {:#?}",
+            res, parent_ty
+        ))
+    }
 }
 
 fn type_check_expr(
     expr: &mut Expression,
     scope: &mut Vec<(String, Type)>,
-    _symbol_table: &mut SymbolTable,
+    type_var_assigns: &mut TypeVarAssignments,
 ) -> Result<Type, String> {
     let res: Result<Type, String> = match expr {
         Expression::IntLiteral(_) => Ok(Type::Int),
         Expression::StringLiteral(_) => Ok(Type::List(Box::new(Type::Char))),
         Expression::CharLiteral(_) => Ok(Type::Char),
+        Expression::UnitValue => Ok(Type::Unit),
         Expression::Symbol(symbol) => Ok(symbol.as_ref().borrow().ty.clone()),
         Expression::FunctionParameter(name) => {
             let ty = scope
@@ -161,7 +399,9 @@ fn type_check_expr(
             flatten_func_app(exprs);
 
             let func = exprs.first_mut().unwrap();
-            let func_ty = type_check_expr(func, scope, _symbol_table)?;
+            // the type var assignments are not really used here because the expression of the
+            // function can't be another function application because of the flattening
+            let func_ty = type_check_expr(func, scope, &mut TypeVarAssignments::new())?;
             let func_tys = if let Type::Function(tys) = func_ty.clone() {
                 tys
             } else {
@@ -170,38 +410,32 @@ fn type_check_expr(
 
             let mut param_tys = vec![];
             for expr in exprs.iter_mut().skip(1) {
-                let ty = type_check_expr(expr, scope, _symbol_table)?;
-                param_tys.push(ty);
-            }
-
-            if func_tys.len() <= param_tys.len() {
-                return Err(format!(
-                    "Function has {} parameters but {} were provided",
-                    func_tys.len() - 1,
-                    param_tys.len()
-                ));
+                let expr_ty = type_check_expr(expr, scope, type_var_assigns)?;
+                param_tys.push(expr_ty);
             }
 
             for (i, (expected_ty, actual_ty)) in func_tys.iter().zip(param_tys.iter()).enumerate() {
-                if expected_ty != actual_ty {
+                if !type_var_assigns.assign_or_check(expected_ty, actual_ty) {
                     return Err(format!(
-                        "Parameter {} has wrong type expected {:?} but got {:?}",
-                        i, expected_ty, actual_ty
+                        "Parameter {} has wrong type expected {:#?} but got {:#?} with assignments {:#?}",
+                        i, expected_ty, actual_ty, type_var_assigns
                     ));
                 }
             }
 
             let pap_return = func_tys[param_tys.len()..].to_vec();
 
-            Ok(if pap_return.len() == 1 {
+            let ret_ty = if pap_return.len() == 1 {
                 // not partial application
                 pap_return[0].clone()
             } else {
                 // partial application
                 Type::Function(pap_return)
-            })
+            };
+
+            Ok(ret_ty)
         }
-        Expression::LambdaAbstraction(_, _) => todo!(),
+        Expression::LambdaAbstraction(_, _) => unimplemented!("Lambda abstraction"),
     };
 
     flatten_function_ty(&res?)

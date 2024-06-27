@@ -840,6 +840,7 @@ The standard library of the functional language is a subset of the Haskell stand
 // - merge the wasm-lib
 // - the apply function again but this time more generic (not only integer arguments) / unit type issues in general -> if import always remove return on unit, if export only remove for wrapper, else never remove
 // - The representing of PAPs at the top level for code generation
+// - Implementation of the parametric polymorphism and specifically assigning a function type to a type variable
 
 = Evaluation
 

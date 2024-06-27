@@ -68,7 +68,7 @@ impl Symbol {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Type {
     Int,
     Char,
@@ -76,6 +76,10 @@ pub enum Type {
     List(Box<Type>),
     Tuple(Vec<Type>),
     Unit,
+    TypeVar {
+        var_name: String,
+        ctx_symbol_name: String,
+    },
     // custom type
 }
 
@@ -84,6 +88,7 @@ pub enum Expression {
     IntLiteral(i64),
     StringLiteral(String),
     CharLiteral(char),
+    UnitValue,
     Symbol(Rc<RefCell<Symbol>>),
     FunctionParameter(String),
     FunctionApplication(Vec<Expression>),
@@ -97,6 +102,7 @@ impl fmt::Debug for Expression {
             Expression::IntLiteral(i) => write!(f, "IntLiteral({})", i),
             Expression::StringLiteral(s) => write!(f, "StringLiteral({})", s),
             Expression::CharLiteral(c) => write!(f, "CharLiteral({})", c),
+            Expression::UnitValue => write!(f, "Unit"),
             Expression::Symbol(sym) => write!(f, "Symbol({})", sym.as_ref().borrow().name),
             Expression::FunctionParameter(name) => write!(f, "FunctionParameter({})", name),
             Expression::FunctionApplication(exprs) if f.alternate() => {
@@ -122,10 +128,14 @@ fn function_type_to_symbol(
     is_imported: bool,
     symbol_table: &mut SymbolTable,
 ) -> Result<(), String> {
+    if symbol_table.contains_key(&name) {
+        return Err(format!("Symbol {} already exists", name));
+    }
+
     let tys = func_ty
         .0
         .iter()
-        .map(parser_type_to_type)
+        .map(|ty| parser_type_to_type(ty, &name))
         .collect::<Result<Vec<Type>, String>>()?;
 
     let ty = if tys.len() == 1 {
@@ -152,7 +162,7 @@ fn function_type_to_symbol(
     Ok(())
 }
 
-fn parser_type_to_type(parser_type: &ast_gen::Type) -> Result<Type, String> {
+fn parser_type_to_type(parser_type: &ast_gen::Type, name: &str) -> Result<Type, String> {
     // TODO: add support for type applications
     for ty in &parser_type.0 {
         let ty = match ty {
@@ -166,11 +176,15 @@ fn parser_type_to_type(parser_type: &ast_gen::Type) -> Result<Type, String> {
             ast_gen::TypeApplicationElement::ParenthesizedType(ty) => {
                 let mut res = vec![];
                 for ty in &ty.0 {
-                    res.push(parser_type_to_type(ty)?);
+                    res.push(parser_type_to_type(ty, name)?);
                 }
 
                 Type::Function(res)
             }
+            ast_gen::TypeApplicationElement::TypeVariable(ty_var) => Type::TypeVar {
+                var_name: ty_var.clone(),
+                ctx_symbol_name: name.to_string(),
+            },
         };
 
         return Ok(ty);
@@ -193,16 +207,17 @@ fn add_function_decl_to_symbol(
     for (i, param) in lhs.iter().enumerate() {
         match param {
             ast_gen::FunctionParameterPattern::AsPattern(param_name, None) => {
+                if sym_params.contains(&param_name.clone()) {
+                    return Err(format!("Duplicate parameter name {}", param_name));
+                }
                 let symbol_ref = symbol.as_ref().borrow();
                 symbol_ref
                     .param_type(i)
                     .ok_or(format!("Function {} has too many parameters", name))?;
 
-                // TODO: find out if a lambda needs explicit type annotations for parameters
-                //let ty = symbol_ref.param_type(i).unwrap();
-
                 sym_params.push(param_name.to_string());
             }
+            ast_gen::FunctionParameterPattern::Wildcard => sym_params.push("_".to_string()),
             _ => todo!(),
         }
     }
@@ -286,15 +301,19 @@ fn parser_fn_param_expr_to_expr(
 ) -> Result<Expression, String> {
     match fn_arg_expr {
         ast_gen::FunctionParameterExpression::Variable(name) => {
-            if let Some(symbol) = symbol_table.get(name) {
-                Ok(Expression::Symbol(symbol.clone()))
-            } else if !scope.is_empty() {
+            if !scope.is_empty() {
                 // check if the symbol is in the scope
-                Ok(scope
+                if let Some(expr) = scope
                     .iter()
                     .find(|s| **s == *name)
                     .map(|s| Expression::FunctionParameter(s.clone()))
-                    .ok_or(format!("Symbol {} not found", name))?)
+                {
+                    return Ok(expr);
+                }
+            }
+
+            if let Some(symbol) = symbol_table.get(name) {
+                Ok(Expression::Symbol(symbol.clone()))
             } else {
                 Err(format!("Symbol {} not found", name))
             }
@@ -307,7 +326,7 @@ fn parser_fn_param_expr_to_expr(
             Ok(Expression::StringLiteral(s.clone()))
         }
         ast_gen::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(*c)),
-        ast_gen::FunctionParameterExpression::Unit => todo!(),
+        ast_gen::FunctionParameterExpression::Unit => Ok(Expression::UnitValue),
     }
 }
 
