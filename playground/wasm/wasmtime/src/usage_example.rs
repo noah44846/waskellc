@@ -14,24 +14,31 @@ pub fn usage_example_main() -> Result<()> {
 
     let module = Module::from_file(&engine, "../../../waskellc/out.wasm")?;
     linker
-        .func_wrap("foreign", "print", |arg: i32| -> () {
-            println!("Printing from host: {}", arg);
-        })?
+        //.func_wrap("foreign", "print", |arg: i32| -> () {
+        //println!("Printing from host: {}", arg);
+        //})?
         .module(&mut store, "", &module)?;
     let instance = linker.instantiate(&mut store, &module)?;
 
     let _memory = instance
         .get_memory(&mut store, "memory")
         .ok_or(anyhow::anyhow!("failed to find memory export"))?;
-    let main = instance.get_typed_func::<(), ()>(&mut store, "main")?;
-    let square = instance.get_typed_func::<i32, i32>(&mut store, "square")?;
-    let sq_print = instance.get_typed_func::<i32, ()>(&mut store, "sq_print")?;
+    let main = instance.get_typed_func::<(), u32>(&mut store, "main")?;
+    //let square = instance.get_typed_func::<i32, i32>(&mut store, "square")?;
+    //let sq_print = instance.get_typed_func::<i32, ()>(&mut store, "sq_print")?;
 
-    main.call(&mut store, ())?;
+    let ptr = main.call(&mut store, ())?;
+    //let mut buf = [0u8; 12];
+    //memory.read(&store, ptr as usize, &mut buf)?;
+    //let num = u32::from_ne_bytes([buf[1], buf[2], buf[3], buf[4]]);
 
-    println!("square(2): {}", square.call(&mut store, 2)?);
+    println!("main() returned: {:?}", ptr);
+    //println!("main() returned: {:?}", buf);
+    //println!("main() returned: {:?}", num);
 
-    sq_print.call(&mut store, 2)?;
+    //println!("square(2): {}", square.call(&mut store, 2)?);
+
+    //sq_print.call(&mut store, 2)?;
 
     Ok(())
 }

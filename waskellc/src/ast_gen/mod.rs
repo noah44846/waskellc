@@ -6,7 +6,7 @@ mod lexer;
 mod parser;
 
 pub use parser::{
-    parse, Expression, FunctionDeclaration, FunctionParameterExpression, FunctionParameterPattern,
-    FunctionType, LeftHandSideExpression, TopDeclaration, TopDeclarations, Type,
-    TypeApplicationElement,
+    parse, DataConstructor, DataDeclaration, Expression, FunctionDeclaration,
+    FunctionParameterExpression, FunctionParameterPattern, FunctionType, LeftHandSideExpression,
+    TopDeclaration, TopDeclarations, Type, TypeApplicationElement,
 };

@@ -629,6 +629,7 @@ The context-free syntax of Waskell is a subset of Haskell (defined in report @ha
 //- No sections (e.g. (1 +) or (+ 1))
 //- labeled fields in records
 //- operator precedence
+//- definition of operator type constructors (check for usage of operators in general)
 
 In short the subset of Haskell that is used in Waskell is the following:
 - Let bindings (and where bindings)

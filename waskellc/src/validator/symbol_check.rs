@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 use crate::ast_gen;
 use crate::validator::type_check::flatten_function_ty;
@@ -8,6 +14,7 @@ use crate::validator::type_check::flatten_function_ty;
 use super::type_check::type_check_syms;
 
 pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
+pub type TypeConstructorTable = HashMap<String, Rc<RefCell<TypeConstructor>>>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IsForeign {
@@ -22,8 +29,48 @@ pub struct Symbol {
     pub name: String,
     pub ty: Type,
     pub expr: Option<Expression>,
+    pub is_data_constructor: bool,
     is_foreign: IsForeign,
 }
+
+#[derive(PartialEq, Clone)]
+pub struct TypeConstructor {
+    pub name: String,
+    pub data_constructors: Vec<Rc<RefCell<Symbol>>>,
+}
+
+impl fmt::Debug for TypeConstructor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypeConstructor")
+            .field("name", &self.name)
+            .field(
+                "data_constructors",
+                &self
+                    .data_constructors
+                    .iter()
+                    .map(|sym| {
+                        let ty = sym.as_ref().borrow().ty.clone();
+                        let tys = if let Type::Function(tys) = &ty {
+                            &tys[..tys.len() - 1]
+                        } else {
+                            &[]
+                        };
+
+                        format!("{}: {:?}", sym.as_ref().borrow().name.clone(), tys)
+                    })
+                    .collect::<Vec<String>>(),
+            )
+            .finish()
+    }
+}
+
+impl Hash for TypeConstructor {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl Eq for TypeConstructor {}
 
 impl Symbol {
     fn param_type(&self, i: usize) -> Option<&Type> {
@@ -80,7 +127,7 @@ pub enum Type {
         var_name: String,
         ctx_symbol_name: String,
     },
-    // custom type
+    CustomType(String),
 }
 
 #[derive(PartialEq, Clone)]
@@ -121,12 +168,88 @@ impl fmt::Debug for Expression {
     }
 }
 
+fn data_decl_to_symbol(
+    data_decl: &ast_gen::DataDeclaration,
+    symbol_table: &mut SymbolTable,
+    type_constructor_table: &mut TypeConstructorTable,
+) -> Result<(), String> {
+    let ast_gen::DataDeclaration {
+        ty_constructor,
+        data_constructors,
+    } = data_decl;
+
+    if type_constructor_table.contains_key(ty_constructor) {
+        return Err(format!(
+            "Type constructor {} already exists",
+            ty_constructor
+        ));
+    }
+
+    let ty_constructor = Rc::new(RefCell::new(TypeConstructor {
+        name: ty_constructor.clone(),
+        data_constructors: vec![],
+    }));
+
+    type_constructor_table.insert(
+        ty_constructor.as_ref().borrow().name.clone(),
+        ty_constructor.clone(),
+    );
+
+    for constructor in data_constructors {
+        if symbol_table.contains_key(&constructor.name) {
+            return Err(format!(
+                "Data constructor {} already exists",
+                constructor.name
+            ));
+        }
+
+        let mut fields = constructor
+            .fields
+            .iter()
+            .map(|ty| {
+                parser_type_to_type(
+                    type_constructor_table,
+                    &ast_gen::Type(vec![ty.clone()]),
+                    &constructor.name,
+                )
+            })
+            .collect::<Result<Vec<Type>, String>>()?;
+
+        // add constructor return type
+        let ty = if fields.is_empty() {
+            Type::CustomType(ty_constructor.as_ref().borrow().name.clone())
+        } else {
+            fields.push(Type::CustomType(
+                ty_constructor.as_ref().borrow().name.clone(),
+            ));
+            Type::Function(fields)
+        };
+
+        let elem = Rc::new(RefCell::new(Symbol {
+            name: constructor.name.clone(),
+            ty,
+            expr: None,
+            is_data_constructor: true,
+            is_foreign: IsForeign::NotForeign,
+        }));
+        ty_constructor
+            .as_ref()
+            .borrow_mut()
+            .data_constructors
+            .push(elem.clone());
+        symbol_table.insert(constructor.name.clone(), elem.clone());
+    }
+
+    Ok(())
+}
+
 fn function_type_to_symbol(
     name: String,
     func_ty: &ast_gen::FunctionType,
     is_exported: bool,
     is_imported: bool,
     symbol_table: &mut SymbolTable,
+    type_constructor_table: &mut TypeConstructorTable,
 ) -> Result<(), String> {
     if symbol_table.contains_key(&name) {
         return Err(format!("Symbol {} already exists", name));
@@ -135,7 +258,7 @@ fn function_type_to_symbol(
     let tys = func_ty
         .0
         .iter()
-        .map(|ty| parser_type_to_type(ty, &name))
+        .map(|ty| parser_type_to_type(type_constructor_table, ty, &name))
         .collect::<Result<Vec<Type>, String>>()?;
 
     let ty = if tys.len() == 1 {
@@ -150,6 +273,7 @@ fn function_type_to_symbol(
             name,
             ty,
             expr: None,
+            is_data_constructor: false,
             is_foreign: if is_imported {
                 IsForeign::ForeignImported
             } else if is_exported {
@@ -162,21 +286,36 @@ fn function_type_to_symbol(
     Ok(())
 }
 
-fn parser_type_to_type(parser_type: &ast_gen::Type, name: &str) -> Result<Type, String> {
+fn parser_type_to_type(
+    type_constructor_table: &mut TypeConstructorTable,
+    parser_type: &ast_gen::Type,
+    name: &str,
+) -> Result<Type, String> {
     // TODO: add support for type applications
-    for ty in &parser_type.0 {
+    if parser_type.0.len() > 1 {
+        return Err("Type applications not supported yet".to_string());
+    }
+
+    if let Some(ty) = parser_type.0.first() {
         let ty = match ty {
             ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
                 "Int" => Type::Int,
                 "Char" => Type::Char,
+                // TODO: add support for type aliases
                 "String" => Type::List(Box::new(Type::Char)),
-                _ => todo!(),
+                _ => {
+                    if let Some(data_decl) = type_constructor_table.get(ty_con) {
+                        Type::CustomType(data_decl.as_ref().borrow().name.clone())
+                    } else {
+                        return Err(format!("Type constructor {} not found", ty_con));
+                    }
+                }
             },
             ast_gen::TypeApplicationElement::Unit => Type::Unit,
             ast_gen::TypeApplicationElement::ParenthesizedType(ty) => {
                 let mut res = vec![];
                 for ty in &ty.0 {
-                    res.push(parser_type_to_type(ty, name)?);
+                    res.push(parser_type_to_type(type_constructor_table, ty, name)?);
                 }
 
                 Type::Function(res)
@@ -318,6 +457,13 @@ fn parser_fn_param_expr_to_expr(
                 Err(format!("Symbol {} not found", name))
             }
         }
+        ast_gen::FunctionParameterExpression::Constructor(name) => {
+            if let Some(symbol) = symbol_table.get(name) {
+                Ok(Expression::Symbol(symbol.clone()))
+            } else {
+                Err(format!("Symbol {} not found", name))
+            }
+        }
         ast_gen::FunctionParameterExpression::ParenthesizedExpr(expr) => {
             parser_expr_to_expr(expr, scope, symbol_table)
         }
@@ -334,8 +480,9 @@ pub fn validate(
     ast: ast_gen::TopDeclarations,
     debug_symbols: bool,
     debug_desugar: bool,
-) -> Result<SymbolTable, String> {
+) -> Result<(SymbolTable, TypeConstructorTable), String> {
     let mut symbol_table: SymbolTable = HashMap::new();
+    let mut type_constructor_table: TypeConstructorTable = HashMap::new();
 
     // TODO: replace this with a std lib
     let global_op_symbols = [
@@ -343,30 +490,35 @@ pub fn validate(
             name: "+".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
+            is_data_constructor: false,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "-".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
+            is_data_constructor: false,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "*".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
+            is_data_constructor: false,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "/".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
+            is_data_constructor: false,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "negate".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int]),
             expr: None,
+            is_data_constructor: false,
             is_foreign: IsForeign::LibImported,
         },
     ];
@@ -375,43 +527,61 @@ pub fn validate(
         symbol_table.insert(symbol.name.clone(), Rc::new(RefCell::new(symbol.clone())));
     }
 
+    // add data declarations to symbol table
+    for decl in ast
+        .0
+        .iter()
+        .filter(|decl| matches!(decl, ast_gen::TopDeclaration::DataDecl { .. }))
+    {
+        if let ast_gen::TopDeclaration::DataDecl(data_decl) = decl {
+            data_decl_to_symbol(data_decl, &mut symbol_table, &mut type_constructor_table)?;
+        } else {
+            unreachable!()
+        }
+    }
+
     // add type signatures to symbol table
-    ast.0
+    for decl in ast
+        .0
         .iter()
         .filter(|decl| matches!(decl, ast_gen::TopDeclaration::TypeSig { .. }))
-        .for_each(|decl| {
-            if let ast_gen::TopDeclaration::TypeSig {
-                name,
+    {
+        if let ast_gen::TopDeclaration::TypeSig {
+            name,
+            ty,
+            is_exported,
+            is_imported,
+            ..
+        } = decl
+        {
+            let is_exported = if name == "main" { true } else { *is_exported };
+            function_type_to_symbol(
+                name.clone(),
                 ty,
                 is_exported,
-                is_imported,
-                ..
-            } = decl
-            {
-                let is_exported = if name == "main" { true } else { *is_exported };
-                function_type_to_symbol(
-                    name.clone(),
-                    ty,
-                    is_exported,
-                    *is_imported,
-                    &mut symbol_table,
-                )
-                .unwrap();
-            }
-        });
+                *is_imported,
+                &mut symbol_table,
+                &mut type_constructor_table,
+            )?;
+        }
+    }
 
     // add function declarations to symbol table
-    ast.0
+    for decl in ast
+        .0
         .iter()
         .filter(|decl| matches!(decl, ast_gen::TopDeclaration::FunctionDecl(_)))
-        .for_each(|decl| {
-            if let ast_gen::TopDeclaration::FunctionDecl(func_decl) = decl {
-                add_function_decl_to_symbol(func_decl, &mut symbol_table).unwrap();
-            }
-        });
+    {
+        if let ast_gen::TopDeclaration::FunctionDecl(func_decl) = decl {
+            add_function_decl_to_symbol(func_decl, &mut symbol_table)?;
+        } else {
+            unreachable!()
+        }
+    }
 
     if debug_symbols {
         println!("Symbol Table:\n{:#?}", symbol_table);
+        println!("Type Constructor Table:\n{:#?}", type_constructor_table);
     }
 
     // type check all symbols
@@ -419,7 +589,8 @@ pub fn validate(
 
     if debug_desugar {
         println!("Desugared Symbol Table:\n{:#?}", symbol_table);
+        println!("Type Constructor Table:\n{:#?}", type_constructor_table);
     }
 
-    Ok(symbol_table)
+    Ok((symbol_table, type_constructor_table))
 }

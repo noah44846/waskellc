@@ -52,10 +52,9 @@ impl TopDeclarations {
 #[derive(Debug)]
 pub enum TopDeclaration {
     //TypeDecl(TypeDeclaration),
-    //DataDecl(DataDeclaration),
     //NewTypeDecl(NewTypeDeclaration),
     //FixityDecl(FixityDeclaration),
-    // may be a list of type variables
+    DataDecl(DataDeclaration),
     TypeSig {
         name: String,
         ty: FunctionType,
@@ -70,14 +69,9 @@ impl TopDeclaration {
         let token = next_token(input, true)?;
         match token {
             Token::ReservedIdent(ident) => match ident.as_str() {
-                "type" => {
-                    unimplemented!()
-                }
                 "data" => {
-                    todo!()
-                }
-                "newtype" => {
-                    unimplemented!()
+                    input.next(); // consume the 'data'
+                    Ok(TopDeclaration::DataDecl(DataDeclaration::parse(input)?))
                 }
                 "foreign" => {
                     input.next(); // consume the 'foreign'
@@ -135,6 +129,12 @@ impl TopDeclaration {
                         next
                     ))
                 }
+                "type" => {
+                    unimplemented!()
+                }
+                "newtype" => {
+                    unimplemented!()
+                }
                 _ => Err(format!("Unexpected keyword: {}", ident)),
             },
             _ => TopDeclaration::parse_type_sig_or_decl(input, false),
@@ -142,29 +142,44 @@ impl TopDeclaration {
     }
 
     fn parse_type_sig_or_decl(input: &mut TokenIter, from_foreign: bool) -> Result<Self, String> {
-        match next_token(input, false)? {
+        let func_name = match next_token(input, false)? {
             // TODO: support (&*) as variables
-            Token::VariableIdent(ident) => match next_token(input, true)? {
-                Token::ReservedOperator(op) if op == "::" => {
-                    input.next(); // consume the '::'
-                    Ok(TopDeclaration::TypeSig {
-                        name: ident,
-                        ty: FunctionType::parse(input)?,
-                        is_exported: false,
-                        is_imported: false,
-                    })
+            Token::Special('(') => {
+                if let Token::VariableSym(sym) = next_token(input, false)? {
+                    if let Token::Special(')') = next_token(input, false)? {
+                        sym
+                    } else {
+                        return Err("Expected ')' after variable symbol".to_string());
+                    }
+                } else {
+                    return Err(
+                        "Expected variable symbol after '('. Got something else".to_string()
+                    );
                 }
-                _ if !from_foreign => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(
-                    ident, input,
-                )?)),
-                _ => Err("Expected type signature after foreign declaration".to_string()),
-            },
-            t => Err(format!("Unexpected token for top declaration: {:?}", t)),
+            }
+            Token::VariableIdent(ident) => ident,
+            t => return Err(format!("Unexpected token for top declaration: {:?}", t)),
+        };
+
+        match next_token(input, true)? {
+            Token::ReservedOperator(op) if op == "::" => {
+                input.next(); // consume the '::'
+                Ok(TopDeclaration::TypeSig {
+                    name: func_name,
+                    ty: FunctionType::parse(input)?,
+                    is_exported: false,
+                    is_imported: false,
+                })
+            }
+            _ if !from_foreign => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(
+                func_name, input,
+            )?)),
+            _ => Err("Expected type signature after foreign declaration".to_string()),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionType(pub Vec<Type>);
 
 impl FunctionType {
@@ -187,10 +202,37 @@ impl FunctionType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Type(pub Vec<TypeApplicationElement>);
 
-#[derive(Debug)]
+impl Type {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        let mut types = vec![];
+        loop {
+            types.push(TypeApplicationElement::parse(input)?);
+            match next_token(input, true)? {
+                // check if the type continues of if this is the end of the type signature (doesn't
+                // support operator type constructors)
+                Token::ReservedOperator(op) if op == "->" => {
+                    break;
+                }
+                Token::Special(';') => {
+                    break;
+                }
+                Token::Special(')') => {
+                    break;
+                }
+                _ => {
+                    continue;
+                }
+            }
+        }
+
+        Ok(Type(types))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum TypeApplicationElement {
     Unit,
     //ListConstructor,
@@ -203,22 +245,16 @@ pub enum TypeApplicationElement {
     TypeConstructor(String),
 }
 
-impl Type {
+impl TypeApplicationElement {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, false)? {
-            Token::ConstructorIdent(ident) => {
-                let elements = vec![TypeApplicationElement::TypeConstructor(ident)];
-                Ok(Type(elements))
-            }
-            Token::VariableIdent(ident) => {
-                let elements = vec![TypeApplicationElement::TypeVariable(ident)];
-                Ok(Type(elements))
-            }
+            Token::ConstructorIdent(ident) => Ok(TypeApplicationElement::TypeConstructor(ident)),
+            Token::VariableIdent(ident) => Ok(TypeApplicationElement::TypeVariable(ident)),
             Token::Special('(') => {
                 match next_token(input, true)? {
                     Token::Special(')') => {
                         input.next(); // consume the ')'
-                        return Ok(Type(vec![TypeApplicationElement::Unit]));
+                        return Ok(TypeApplicationElement::Unit);
                     }
                     Token::Special(',') => {
                         todo!("unapplied tuple type");
@@ -238,9 +274,7 @@ impl Type {
                         }
                         Token::Special(')') => {
                             input.next(); // consume the ')'
-                            return Ok(Type(vec![TypeApplicationElement::ParenthesizedType(
-                                Box::new(elem),
-                            )]));
+                            return Ok(TypeApplicationElement::ParenthesizedType(Box::new(elem)));
                         }
                         _ => Err(format!(
                             "Expected ',' or ')' after type in parenthesized type, got {:?}",
@@ -251,6 +285,81 @@ impl Type {
             }
             t => todo!("Type parsing for lists and type variables: {:?}", t),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct DataDeclaration {
+    pub ty_constructor: String,
+    // TODO: add support for type parameters
+    pub data_constructors: Vec<DataConstructor>,
+}
+
+impl DataDeclaration {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        let name = match next_token(input, false)? {
+            Token::ConstructorIdent(ident) => ident,
+            t => return Err(format!("Expected constructor identifier, got {:?}", t)),
+        };
+
+        if matches!(next_token(input, true)?, Token::ReservedOperator(op) if op == "=") {
+            input.next(); // consume the '='
+        } else {
+            return Ok(DataDeclaration {
+                ty_constructor: name,
+                data_constructors: vec![],
+            });
+        }
+
+        let mut constructors = vec![];
+        loop {
+            constructors.push(DataConstructor::parse(input)?);
+            match next_token(input, true)? {
+                Token::ReservedOperator(op) if op == "|" => {
+                    input.next(); // consume the '|'
+                    continue;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        Ok(DataDeclaration {
+            ty_constructor: name,
+            data_constructors: constructors,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct DataConstructor {
+    pub name: String,
+    pub fields: Vec<TypeApplicationElement>,
+}
+
+impl DataConstructor {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        let name = match next_token(input, false)? {
+            Token::ConstructorIdent(ident) => ident,
+            t => return Err(format!("Expected constructor identifier, got {:?}", t)),
+        };
+
+        let mut fields = vec![];
+        loop {
+            match next_token(input, true)? {
+                Token::ReservedOperator(op) if op == "|" => {
+                    break;
+                }
+                Token::Special(';') => {
+                    break;
+                }
+                _ => {}
+            }
+            fields.push(TypeApplicationElement::parse(input)?);
+        }
+
+        Ok(DataConstructor { name, fields })
     }
 }
 
@@ -269,12 +378,10 @@ impl FunctionDeclaration {
     fn parse(name: String, input: &mut TokenIter) -> Result<Self, String> {
         let mut lhs = vec![];
         let next = next_token(input, true)?;
-        if let Token::ReservedOperator(op) = next {
-            if op == "=" {
-                input.next(); // consume the '='
-                let rhs = Expression::parse(input)?;
-                return Ok(FunctionDeclaration { name, lhs, rhs });
-            }
+        if matches!(next, Token::ReservedOperator(op) if op == "=") {
+            input.next(); // consume the '='
+            let rhs = Expression::parse(input)?;
+            return Ok(FunctionDeclaration { name, lhs, rhs });
         }
 
         loop {
@@ -466,7 +573,7 @@ pub enum FunctionParameterExpression {
     IntegerLiteral(i64),
     CharLiteral(char),
     Variable(String),
-    //Constructor(String),
+    Constructor(String),
     //EmptyList,
     //EmptyTuple(i32),
     Unit,
@@ -483,6 +590,7 @@ impl FunctionParameterExpression {
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, false)? {
             Token::VariableIdent(ident) => Ok(FunctionParameterExpression::Variable(ident)),
+            Token::ConstructorIdent(ident) => Ok(FunctionParameterExpression::Constructor(ident)),
             Token::Special('(') => match next_token(input, true)? {
                 Token::Special(')') => {
                     input.next(); // consume the ')'

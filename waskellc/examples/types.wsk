@@ -1,8 +1,30 @@
---data Bool = True | False;
+data Bool = True | False;
+
+data Ratio = Ratio Int Int;
 
 --data Maybe a = Just a | Nothing;
+data IntMaybe = Just Int | Nothing;
 
 --data List a = Nil | Cons a (List a);
+data IntList = Nil | Cons Int IntList;
 
-foreign export wasm consume :: Int -> ();
-consume x = ();
+--mapIntList :: (Int -> Int) -> IntList -> IntList;
+--mapIntList f Nil = Nil;
+--mapIntList f (Cons x xs) = Cons (f x) (mapIntList f xs);
+
+--and :: Bool -> Bool -> Bool;
+--and True y = y;
+--and False _ = False;
+
+--or :: Bool -> Bool -> Bool;
+--or True _ = True;
+--or False y = y;
+
+intMaybe :: Int -> IntMaybe;
+intMaybe x = Just x;
+
+f :: Int -> Int -> IntMaybe;
+f x y = intMaybe (x + y);
+
+main :: IntMaybe;
+main = f 1 2;

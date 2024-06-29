@@ -16,11 +16,13 @@ struct CodeGen {
     imports: Option<DeclaredWasmImports>,
     functions: Option<DeclaredWasmFunctions>,
     symbol_table: Rc<validator::SymbolTable>,
+    type_constructor_table: Rc<validator::TypeConstructorTable>,
 }
 
 impl CodeGen {
     fn generate(
         symbol_table: validator::SymbolTable,
+        type_constuctor_table: validator::TypeConstructorTable,
         print_wasm: bool,
         show_offset: bool,
     ) -> Result<Vec<u8>, String> {
@@ -32,6 +34,7 @@ impl CodeGen {
             imports: Some(DeclaredWasmImports::new()),
             functions: None,
             symbol_table,
+            type_constructor_table: Rc::new(type_constuctor_table),
         };
 
         res.handle_imports()?;
@@ -92,6 +95,9 @@ impl CodeGen {
 
         // TODO: fix naming collisions with the imported functions
         imports
+            .import_func("lib", ":full_eval", arg_1_int32_ret_int32)
+            .unwrap();
+        imports
             .import_func("lib", ":eval", arg_1_int32_ret_int32)
             .unwrap();
         imports
@@ -110,7 +116,7 @@ impl CodeGen {
             .import_func("lib", ":make_thunk_from_pap", arg_2_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", ":make_val", arg_1_int32_ret_int32)
+            .import_func("lib", ":make_val", arg_2_int32_ret_int32)
             .unwrap();
 
         self.symbol_table
@@ -143,19 +149,36 @@ impl CodeGen {
     }
 
     fn generate_functions(mut self) -> Result<Module, String> {
-        self.symbol_table
+        self.type_constructor_table
             .clone()
             .values()
-            .map(|s| s.as_ref().borrow())
-            .filter(|s| !s.is_imported())
-            .map(|s| match self.create_signature(&s) {
-                Ok(_) => Ok(s),
-                Err(e) => Err(e),
+            .flat_map(|t| {
+                let t_ref = t.as_ref().borrow();
+                t_ref
+                    .data_constructors
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (i, s.clone()))
+                    .collect::<Vec<_>>()
             })
-            // collect to ensure that all the signatures are created before generating the function body
-            .collect::<Result<Vec<_>, String>>()?
-            .iter()
-            .map(|s| self.generate_function_body(s))
+            .map(|(i, s)| self.generate_data_constructors(&s.as_ref().borrow(), i as u32))
+            .collect::<Result<Vec<_>, String>>()?;
+
+        let symbol_table = self.symbol_table.clone();
+        let functions = symbol_table
+            .values()
+            .map(|s| s.as_ref().borrow())
+            .filter(|s| !s.is_imported() && !s.is_data_constructor);
+
+        // create the function signatures
+        functions
+            .clone()
+            .map(|s| self.create_signature(&s))
+            .collect::<Result<Vec<_>, String>>()?;
+
+        functions
+            .clone()
+            .map(|s| self.generate_function_body(&s))
             .collect::<Result<Vec<_>, String>>()?;
 
         let apply_func_idx = self.generate_apply_function()?;
@@ -242,6 +265,78 @@ impl CodeGen {
         Ok(())
     }
 
+    fn generate_data_constructors(
+        &mut self,
+        symbol: &validator::Symbol,
+        data_constructor_index: u32,
+    ) -> Result<(), String> {
+        let mut instrs = vec![];
+        let functions = self.functions.as_mut().unwrap();
+        let make_val_idx = functions
+            .function_index(":make_val")
+            .ok_or("Function make_val not found in the function table")?;
+        let make_env_idx = functions
+            .function_index(":make_env")
+            .ok_or("Function make_env not found in the function table")?;
+
+        let ty_idx = self.func_ty_idx_from_symbol(symbol, true)?;
+
+        self.functions
+            .as_mut()
+            .unwrap()
+            .add_function(&symbol.name, ty_idx)
+            .ok_or(format!(
+                "Function {} already exists in the function table",
+                symbol.name
+            ))?;
+
+        let local_idx = symbol.arity() as u32; // local variable to store the env pointer
+
+        instrs.push(Instruction::I32Const(symbol.arity() as i32));
+        instrs.push(Instruction::Call(make_env_idx));
+        instrs.push(Instruction::LocalSet(local_idx));
+
+        instrs.push(Instruction::LocalGet(local_idx));
+        instrs.push(Instruction::I32Const(symbol.arity() as i32)); // number of params (not including the data constructor index)
+        instrs.push(Instruction::I32Store(MemArg {
+            align: 2,
+            offset: 0,
+            memory_index: 0,
+        }));
+
+        instrs.push(Instruction::LocalGet(local_idx));
+        instrs.push(Instruction::I32Const(data_constructor_index as i32)); // data constructor index
+        instrs.push(Instruction::I32Store(MemArg {
+            align: 2,
+            offset: 4,
+            memory_index: 0,
+        }));
+
+        for i in 0..symbol.arity() {
+            instrs.push(Instruction::LocalGet(local_idx));
+            instrs.push(Instruction::LocalGet(i as u32));
+            instrs.push(Instruction::I32Store(MemArg {
+                align: 2,
+                offset: ((i + 2) * 4) as u64,
+                memory_index: 0,
+            }));
+        }
+
+        instrs.push(Instruction::I32Const(1));
+        instrs.push(Instruction::LocalGet(local_idx));
+        instrs.push(Instruction::Call(make_val_idx));
+        instrs.push(Instruction::End);
+
+        let mut f = Function::new(vec![(1, ValType::I32)]);
+        instrs.iter().for_each(|instr| {
+            f.instruction(instr);
+        });
+
+        self.code_section.function(&f);
+
+        Ok(())
+    }
+
     fn generate_function_body(&mut self, symbol: &validator::Symbol) -> Result<(), String> {
         let mut locals = vec![];
         let mut instrs = vec![];
@@ -312,9 +407,9 @@ impl CodeGen {
         let func_idx = functions
             .function_index(&sym.name)
             .ok_or(format!("Function {} not found", sym.name))?;
-        let eval_idx = functions
-            .function_index(":eval")
-            .ok_or("Function eval not found in the function table")?;
+        let full_eval_idx = functions
+            .function_index(":full_eval")
+            .ok_or("Function full_eval not found in the function table")?;
         let make_val_idx = functions
             .function_index(":make_val")
             .ok_or("Function make_val not found in the function table")?;
@@ -324,11 +419,13 @@ impl CodeGen {
                 let num_params = params.len() - 1;
 
                 for i in 0..num_params {
+                    // TODO: change to one if it isn't a int
+                    instrs.push(Instruction::I32Const(0));
                     instrs.push(Instruction::LocalGet(i as u32));
                     instrs.push(Instruction::Call(make_val_idx));
                 }
                 instrs.push(Instruction::Call(func_idx));
-                instrs.push(Instruction::Call(eval_idx));
+                instrs.push(Instruction::Call(full_eval_idx));
 
                 if let validator::Type::Unit = params.last().unwrap() {
                     instrs.push(Instruction::Drop);
@@ -339,7 +436,7 @@ impl CodeGen {
             validator::Type::List(_) | validator::Type::Tuple(_) => todo!(),
             ty => {
                 instrs.push(Instruction::Call(func_idx));
-                instrs.push(Instruction::Call(eval_idx));
+                instrs.push(Instruction::Call(full_eval_idx));
 
                 if let validator::Type::Unit = ty {
                     instrs.push(Instruction::Drop);
@@ -369,13 +466,13 @@ impl CodeGen {
         let make_val_idx = functions
             .function_index(":make_val")
             .ok_or("Function make_val not found in the function table")?;
-        let eval_idx = functions
-            .function_index(":eval")
-            .ok_or("Function eval not found in the function table")?;
+        let full_eval_idx = functions
+            .function_index(":full_eval")
+            .ok_or("Function full_eval not found in the function table")?;
 
         for i in 0..sym.arity() {
             instrs.push(Instruction::LocalGet(i as u32));
-            instrs.push(Instruction::Call(eval_idx));
+            instrs.push(Instruction::Call(full_eval_idx));
         }
 
         instrs.push(Instruction::Call(func_idx));
@@ -383,6 +480,10 @@ impl CodeGen {
         if let validator::Type::Function(params) = &sym.ty {
             if let validator::Type::Unit = params.last().unwrap() {
             } else {
+                // TODO: change to one if it isn't a int
+                instrs.push(Instruction::LocalSet(0));
+                instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::LocalGet(0));
                 instrs.push(Instruction::Call(make_val_idx));
             }
         } else {
@@ -461,6 +562,7 @@ impl CodeGen {
                     .function_index(":make_val")
                     .ok_or("Function make_val not found in the function table")?;
 
+                instrs.push(Instruction::I32Const(0));
                 instrs.push(Instruction::I32Const(*val as i32));
                 instrs.push(Instruction::Call(make_val_idx));
                 instrs.push(Instruction::End);
@@ -553,6 +655,7 @@ impl CodeGen {
                     .function_index(":make_val")
                     .ok_or("Function make_val not found in the function table")?;
 
+                instrs.push(Instruction::I32Const(0));
                 instrs.push(Instruction::I32Const(*val as i32));
                 instrs.push(Instruction::Call(make_val_idx));
                 instrs.push(Instruction::LocalSet(local_idx as u32));
@@ -563,6 +666,7 @@ impl CodeGen {
                     .function_index(":make_val")
                     .ok_or("Function make_val not found in the function table")?;
 
+                instrs.push(Instruction::I32Const(0));
                 instrs.push(Instruction::I32Const(0));
                 instrs.push(Instruction::Call(make_val_idx));
                 instrs.push(Instruction::LocalSet(local_idx as u32));
@@ -764,6 +868,7 @@ impl CodeGen {
 
             if ret_ty.is_none() {
                 instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::I32Const(0));
                 instrs.push(Instruction::Call(make_val_idx));
             }
 
@@ -786,8 +891,9 @@ impl CodeGen {
 
 pub fn generate_code(
     symbol_table: validator::SymbolTable,
+    type_constuctor_table: validator::TypeConstructorTable,
     print_wasm: bool,
     show_offset: bool,
 ) -> Result<Vec<u8>, String> {
-    CodeGen::generate(symbol_table, print_wasm, show_offset)
+    CodeGen::generate(symbol_table, type_constuctor_table, print_wasm, show_offset)
 }
