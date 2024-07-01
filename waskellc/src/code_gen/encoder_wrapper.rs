@@ -200,3 +200,47 @@ impl DeclaredWasmFunctions {
         )
     }
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct WasmFunctionLocals {
+    locals: Vec<ValType>,
+    current_idx: u32,
+}
+
+impl WasmFunctionLocals {
+    pub fn new(num_params: u32) -> Self {
+        WasmFunctionLocals {
+            locals: Vec::new(),
+            current_idx: num_params,
+        }
+    }
+
+    pub fn add_local(&mut self, ty: ValType) -> u32 {
+        let idx = self.current_idx;
+        self.locals.push(ty);
+        self.current_idx += 1;
+        idx
+    }
+}
+
+impl From<WasmFunctionLocals> for wasm_encoder::Function {
+    fn from(val: WasmFunctionLocals) -> Self {
+        let mut rle_locals: Vec<(u32, ValType)> = vec![];
+        if !val.locals.is_empty() {
+            let mut count = 1;
+            let mut prev = val.locals[0];
+            for ty in val.locals.iter().skip(1) {
+                if prev == *ty {
+                    count += 1;
+                } else {
+                    rle_locals.push((count, prev));
+                    count = 1;
+                    prev = *ty;
+                }
+            }
+            rle_locals.push((count, prev));
+        }
+
+        Function::new(rle_locals)
+    }
+}

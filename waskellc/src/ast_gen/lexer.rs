@@ -38,8 +38,8 @@ pub enum Token {
     #[regex(r"[\(),;\[\]`\{}]", |lex| lex.slice().chars().next().unwrap(), priority = 200)]
     Special(char),
 
-    #[regex(r"\d+", |lex| lex.slice().parse::<i64>().unwrap())]
-    Integer(i64),
+    #[regex(r"\d+", |lex| lex.slice().parse::<i32>().unwrap())]
+    Integer(i32),
 
     #[regex(r#"'.*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
     Char(char),

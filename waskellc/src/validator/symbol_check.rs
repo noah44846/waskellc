@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
     rc::Rc,
@@ -14,7 +14,7 @@ use crate::validator::type_check::flatten_function_ty;
 use super::type_check::type_check_syms;
 
 pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
-pub type TypeConstructorTable = HashMap<String, Rc<RefCell<TypeConstructor>>>;
+type TypeConstructorTable = HashMap<String, Rc<RefCell<TypeConstructor>>>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IsForeign {
@@ -29,12 +29,12 @@ pub struct Symbol {
     pub name: String,
     pub ty: Type,
     pub expr: Option<Expression>,
-    pub is_data_constructor: bool,
-    is_foreign: IsForeign,
+    pub data_constructor_idx: Option<usize>,
+    pub is_foreign: IsForeign,
 }
 
 #[derive(PartialEq, Clone)]
-pub struct TypeConstructor {
+struct TypeConstructor {
     pub name: String,
     pub data_constructors: Vec<Rc<RefCell<Symbol>>>,
 }
@@ -73,7 +73,7 @@ impl Hash for TypeConstructor {
 impl Eq for TypeConstructor {}
 
 impl Symbol {
-    fn param_type(&self, i: usize) -> Option<&Type> {
+    pub fn param_type(&self, i: usize) -> Option<&Type> {
         match self.ty {
             // lase argument is the return type
             Type::Function(ref params) if i < params.len() - 1 => params.get(i),
@@ -132,15 +132,78 @@ pub enum Type {
 
 #[derive(PartialEq, Clone)]
 pub enum Expression {
-    IntLiteral(i64),
+    IntLiteral(i32),
     StringLiteral(String),
     CharLiteral(char),
     UnitValue,
     Symbol(Rc<RefCell<Symbol>>),
-    FunctionParameter(String),
+    ScopeSymbol(String),
     FunctionApplication(Vec<Expression>),
+    Tuple(Vec<Expression>),
     LambdaAbstraction(Vec<String>, Box<Expression>),
-    // case expression...
+    CaseExpression(CaseExpression),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct CaseExpression {
+    pub input_expr: Box<Expression>,
+    pub input_ty: Box<Type>,
+    pub branches: Vec<CaseBranch>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct CaseBranch {
+    pub pattern: CaseBranchPattern,
+    pub branch_expr: Expression,
+}
+
+#[derive(PartialEq, Clone)]
+pub enum CaseBranchPattern {
+    IntLiteral(i32),
+    AsPattern(String, Option<Box<CaseBranchPattern>>),
+    Constructor {
+        data_constructor: Rc<RefCell<Symbol>>,
+        fields: Vec<CaseBranchPattern>,
+    },
+    Tuple(Vec<CaseBranchPattern>),
+    Wildcard,
+}
+
+impl fmt::Debug for CaseBranchPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CaseBranchPattern::IntLiteral(i) => write!(f, "IntLiteral({})", i),
+            CaseBranchPattern::AsPattern(name, pat) if f.alternate() => {
+                write!(f, "AsPattern({}, {:#?})", name, pat)
+            }
+            CaseBranchPattern::AsPattern(name, pat) => {
+                write!(f, "AsPattern({}, {:?})", name, pat)
+            }
+            CaseBranchPattern::Constructor {
+                data_constructor,
+                fields,
+            } if f.alternate() => {
+                write!(
+                    f,
+                    "Constructor({}, {:#?})",
+                    data_constructor.as_ref().borrow().name,
+                    fields
+                )
+            }
+            CaseBranchPattern::Constructor {
+                data_constructor,
+                fields,
+            } => write!(
+                f,
+                "Constructor({}, {:?})",
+                data_constructor.as_ref().borrow().name,
+                fields
+            ),
+            CaseBranchPattern::Tuple(pats) if f.alternate() => write!(f, "Tuple({:#?})", pats),
+            CaseBranchPattern::Tuple(pats) => write!(f, "Tuple({:?})", pats),
+            CaseBranchPattern::Wildcard => write!(f, "Wildcard"),
+        }
+    }
 }
 
 impl fmt::Debug for Expression {
@@ -151,7 +214,9 @@ impl fmt::Debug for Expression {
             Expression::CharLiteral(c) => write!(f, "CharLiteral({})", c),
             Expression::UnitValue => write!(f, "Unit"),
             Expression::Symbol(sym) => write!(f, "Symbol({})", sym.as_ref().borrow().name),
-            Expression::FunctionParameter(name) => write!(f, "FunctionParameter({})", name),
+            Expression::ScopeSymbol(name) => write!(f, "FunctionParameter({})", name),
+            Expression::Tuple(exprs) if f.alternate() => write!(f, "Tuple({:#?})", exprs),
+            Expression::Tuple(exprs) => write!(f, "Tuple({:?})", exprs),
             Expression::FunctionApplication(exprs) if f.alternate() => {
                 write!(f, "FunctionApplication({:#?})", exprs)
             }
@@ -163,6 +228,12 @@ impl fmt::Debug for Expression {
             }
             Expression::LambdaAbstraction(params, expr) => {
                 write!(f, "LambdaAbstraction({:?}, {:?})", params, expr)
+            }
+            Expression::CaseExpression(case_expr) if f.alternate() => {
+                write!(f, "CaseExpression({:#?})", case_expr)
+            }
+            Expression::CaseExpression(case_expr) => {
+                write!(f, "CaseExpression({:?})", case_expr)
             }
         }
     }
@@ -195,7 +266,7 @@ fn data_decl_to_symbol(
         ty_constructor.clone(),
     );
 
-    for constructor in data_constructors {
+    for (i, constructor) in data_constructors.iter().enumerate() {
         if symbol_table.contains_key(&constructor.name) {
             return Err(format!(
                 "Data constructor {} already exists",
@@ -229,7 +300,7 @@ fn data_decl_to_symbol(
             name: constructor.name.clone(),
             ty,
             expr: None,
-            is_data_constructor: true,
+            data_constructor_idx: Some(i),
             is_foreign: IsForeign::NotForeign,
         }));
         ty_constructor
@@ -273,7 +344,7 @@ fn function_type_to_symbol(
             name,
             ty,
             expr: None,
-            is_data_constructor: false,
+            data_constructor_idx: None,
             is_foreign: if is_imported {
                 IsForeign::ForeignImported
             } else if is_exported {
@@ -332,43 +403,207 @@ fn parser_type_to_type(
 }
 
 fn add_function_decl_to_symbol(
-    func_decl: &ast_gen::FunctionDeclaration,
+    func_decls: Vec<&ast_gen::FunctionDeclaration>,
     symbol_table: &mut SymbolTable,
 ) -> Result<(), String> {
-    let ast_gen::FunctionDeclaration { name, lhs, rhs } = func_decl;
+    let ast_gen::FunctionDeclaration { name, lhs, .. } = func_decls[0];
 
     let symbol = symbol_table
         .get(name)
         .ok_or(format!("Function type signature for {} not found", name))?;
     let symbol = symbol.clone();
 
-    let mut sym_params = vec![];
-    for (i, param) in lhs.iter().enumerate() {
-        match param {
-            ast_gen::FunctionParameterPattern::AsPattern(param_name, None) => {
-                if sym_params.contains(&param_name.clone()) {
-                    return Err(format!("Duplicate parameter name {}", param_name));
-                }
-                let symbol_ref = symbol.as_ref().borrow();
-                symbol_ref
-                    .param_type(i)
-                    .ok_or(format!("Function {} has too many parameters", name))?;
-
-                sym_params.push(param_name.to_string());
-            }
-            ast_gen::FunctionParameterPattern::Wildcard => sym_params.push("_".to_string()),
-            _ => todo!(),
-        }
-    }
-
-    let expr = parser_expr_to_expr(rhs, &sym_params, symbol_table)?;
-    let mut symbol_ref = symbol.as_ref().borrow_mut();
-    if sym_params.is_empty() {
+    if let Some(sym_names) = get_param_names_form_non_case_decl(&func_decls) {
+        let expr = if sym_names.is_empty() {
+            parser_expr_to_expr(&func_decls[0].rhs, &[], symbol_table)?
+        } else {
+            Expression::LambdaAbstraction(
+                sym_names.clone(),
+                Box::new(parser_expr_to_expr(
+                    &func_decls[0].rhs,
+                    sym_names.as_slice(),
+                    symbol_table,
+                )?),
+            )
+        };
+        let mut symbol_ref = symbol.borrow_mut();
         symbol_ref.expr = Some(expr);
         return Ok(());
     }
-    symbol_ref.expr = Some(Expression::LambdaAbstraction(sym_params, Box::new(expr)));
+
+    let sym_params = (0..lhs.len())
+        .map(|i| {
+            (
+                format!(":{}_{}", name, i),
+                symbol.as_ref().borrow().param_type(i).unwrap().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let (input_expr, input_ty) = if sym_params.len() == 1 {
+        let (sym_name, ty) = sym_params.first().unwrap();
+        (Expression::ScopeSymbol(sym_name.clone()), ty.clone())
+    } else {
+        (
+            Expression::Tuple(
+                sym_params
+                    .iter()
+                    .map(|(sym_name, _)| Expression::ScopeSymbol(sym_name.clone()))
+                    .collect(),
+            ),
+            Type::Tuple(
+                sym_params
+                    .iter()
+                    .map(|(_, ty)| ty.clone())
+                    .collect::<Vec<_>>(),
+            ),
+        )
+    };
+
+    let mut case_expr = CaseExpression {
+        input_expr: Box::new(input_expr),
+        input_ty: Box::new(input_ty),
+        branches: vec![],
+    };
+
+    for decl in func_decls {
+        let ast_gen::FunctionDeclaration { lhs, rhs, .. } = decl;
+
+        if lhs.len() != sym_params.len() {
+            return Err(format!(
+                "Function {} has different number of parameters in different declarations",
+                name
+            ));
+        }
+
+        let mut scope = sym_params
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect::<HashSet<_>>();
+        let mut patterns = vec![];
+        for pattern in lhs {
+            let pat = parser_pattern_to_branch_pattern(pattern, &mut scope, symbol_table)?;
+            patterns.push(pat);
+        }
+
+        case_expr.branches.push(CaseBranch {
+            pattern: if sym_params.len() == 1 {
+                patterns[0].clone()
+            } else {
+                CaseBranchPattern::Tuple(patterns.clone())
+            },
+            branch_expr: parser_expr_to_expr(rhs, &Vec::from_iter(scope), symbol_table)?,
+        });
+    }
+
+    let mut symbol_ref = symbol.borrow_mut();
+    symbol_ref.expr = Some(Expression::LambdaAbstraction(
+        sym_params.iter().map(|(name, _)| name.clone()).collect(),
+        Box::new(Expression::CaseExpression(case_expr)),
+    ));
     Ok(())
+}
+
+fn get_param_names_form_non_case_decl(
+    func_decls: &[&ast_gen::FunctionDeclaration],
+) -> Option<Vec<String>> {
+    if func_decls.len() == 1 {
+        return func_decls[0]
+            .lhs
+            .iter()
+            .map(|lhs| {
+                if let ast_gen::FunctionParameterPattern::AsPattern(name, _) = lhs {
+                    Some(name.clone())
+                } else if let ast_gen::FunctionParameterPattern::Wildcard = lhs {
+                    Some("_".to_string())
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<String>>>();
+    }
+    None
+}
+
+fn parser_pattern_to_branch_pattern(
+    pattern: &ast_gen::FunctionParameterPattern,
+    scope: &mut HashSet<String>,
+    symbol_table: &SymbolTable,
+) -> Result<CaseBranchPattern, String> {
+    match pattern {
+        ast_gen::FunctionParameterPattern::AsPattern(param_name, as_pattern) => {
+            let as_pattern = as_pattern
+                .as_ref()
+                .map(|p| parser_pattern_to_branch_pattern(p, scope, symbol_table))
+                .transpose()?;
+
+            scope.insert(param_name.clone());
+            Ok(CaseBranchPattern::AsPattern(
+                param_name.clone(),
+                as_pattern.map(Box::new),
+            ))
+        }
+        ast_gen::FunctionParameterPattern::IntegerLiteral(val) => {
+            Ok(CaseBranchPattern::IntLiteral(*val))
+        }
+        ast_gen::FunctionParameterPattern::ConstructorPattern(constructor) => {
+            let symbol = symbol_table
+                .get(constructor)
+                .ok_or(format!("Data constructor {} not found", constructor))?;
+
+            if matches!(symbol.as_ref().borrow().ty.clone(), Type::Function(_)) {
+                return Err(format!(
+                    "Data constructor {} has too many fields",
+                    constructor
+                ));
+            }
+
+            Ok(CaseBranchPattern::Constructor {
+                data_constructor: symbol.clone(),
+                fields: vec![],
+            })
+        }
+        ast_gen::FunctionParameterPattern::Wildcard => Ok(CaseBranchPattern::Wildcard),
+        ast_gen::FunctionParameterPattern::ParenthesizedPattern(pattern) => {
+            match pattern.as_ref() {
+                ast_gen::Pattern::NegatedIntegerLiteral(val) => {
+                    Ok(CaseBranchPattern::IntLiteral(-val))
+                }
+                ast_gen::Pattern::ConstructorPattern(constructor, fields) => {
+                    let symbol = symbol_table
+                        .get(constructor)
+                        .ok_or(format!("Data constructor {} not found", constructor))?;
+
+                    if let Type::Function(fields_ty) = symbol.as_ref().borrow().ty.clone() {
+                        if fields_ty.len() - 1 != fields.len() {
+                            return Err(format!(
+                                "Data constructor {} has too many fields",
+                                constructor
+                            ));
+                        }
+                    } else {
+                        return Err(format!(
+                            "Data constructor {} does not have fields",
+                            constructor
+                        ));
+                    }
+
+                    let fields = fields
+                        .iter()
+                        .map(|field| parser_pattern_to_branch_pattern(field, scope, symbol_table))
+                        .collect::<Result<Vec<_>, String>>()?;
+
+                    Ok(CaseBranchPattern::Constructor {
+                        data_constructor: symbol.clone(),
+                        fields,
+                    })
+                }
+                ast_gen::Pattern::FunctionParameterPattern(param) => {
+                    parser_pattern_to_branch_pattern(param, scope, symbol_table)
+                }
+            }
+        }
+    }
 }
 
 fn parser_expr_to_expr(
@@ -445,7 +680,7 @@ fn parser_fn_param_expr_to_expr(
                 if let Some(expr) = scope
                     .iter()
                     .find(|s| **s == *name)
-                    .map(|s| Expression::FunctionParameter(s.clone()))
+                    .map(|s| Expression::ScopeSymbol(s.clone()))
                 {
                     return Ok(expr);
                 }
@@ -480,7 +715,7 @@ pub fn validate(
     ast: ast_gen::TopDeclarations,
     debug_symbols: bool,
     debug_desugar: bool,
-) -> Result<(SymbolTable, TypeConstructorTable), String> {
+) -> Result<SymbolTable, String> {
     let mut symbol_table: SymbolTable = HashMap::new();
     let mut type_constructor_table: TypeConstructorTable = HashMap::new();
 
@@ -490,35 +725,35 @@ pub fn validate(
             name: "+".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_data_constructor: false,
+            data_constructor_idx: None,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "-".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_data_constructor: false,
+            data_constructor_idx: None,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "*".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_data_constructor: false,
+            data_constructor_idx: None,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "/".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
             expr: None,
-            is_data_constructor: false,
+            data_constructor_idx: None,
             is_foreign: IsForeign::LibImported,
         },
         Symbol {
             name: "negate".to_owned(),
             ty: Type::Function(vec![Type::Int, Type::Int]),
             expr: None,
-            is_data_constructor: false,
+            data_constructor_idx: None,
             is_foreign: IsForeign::LibImported,
         },
     ];
@@ -563,21 +798,34 @@ pub fn validate(
                 &mut symbol_table,
                 &mut type_constructor_table,
             )?;
-        }
-    }
-
-    // add function declarations to symbol table
-    for decl in ast
-        .0
-        .iter()
-        .filter(|decl| matches!(decl, ast_gen::TopDeclaration::FunctionDecl(_)))
-    {
-        if let ast_gen::TopDeclaration::FunctionDecl(func_decl) = decl {
-            add_function_decl_to_symbol(func_decl, &mut symbol_table)?;
         } else {
             unreachable!()
         }
     }
+
+    // add function declarations to symbol table (merge function decls with same name)
+    ast.0
+        .iter()
+        .filter(|decl| matches!(decl, ast_gen::TopDeclaration::FunctionDecl(_)))
+        .map(|decl| {
+            if let ast_gen::TopDeclaration::FunctionDecl(func_decl) = decl {
+                func_decl
+            } else {
+                unreachable!()
+            }
+        })
+        .fold(HashMap::new(), |mut acc: HashMap<_, Vec<_>>, decl| {
+            let name = decl.name.clone();
+            if let Some(elem) = acc.get_mut(&name) {
+                elem.push(decl);
+            } else {
+                acc.insert(name, vec![decl]);
+            }
+            acc
+        })
+        .into_values()
+        .map(|decls| add_function_decl_to_symbol(decls, &mut symbol_table))
+        .collect::<Result<Vec<_>, String>>()?;
 
     if debug_symbols {
         println!("Symbol Table:\n{:#?}", symbol_table);
@@ -585,12 +833,12 @@ pub fn validate(
     }
 
     // type check all symbols
-    type_check_syms(&mut symbol_table)?;
+    let type_checked_sym_tlb = type_check_syms(symbol_table)?;
 
     if debug_desugar {
-        println!("Desugared Symbol Table:\n{:#?}", symbol_table);
+        println!("Desugared Symbol Table:\n{:#?}", type_checked_sym_tlb);
         println!("Type Constructor Table:\n{:#?}", type_constructor_table);
     }
 
-    Ok((symbol_table, type_constructor_table))
+    Ok(type_checked_sym_tlb)
 }

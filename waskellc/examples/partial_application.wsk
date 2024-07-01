@@ -1,10 +1,13 @@
-foreign export wasm add :: Int -> Int -> Int;
+--foreign export wasm add :: Int -> Int -> Int;
+add :: Int -> Int -> Int;
 add = (+);
 
-foreign export wasm plusOne :: Int -> Int;
+--foreign export wasm plusOne :: Int -> Int;
+plusOne :: Int -> Int;
 plusOne = (+) 1;
 
-foreign export wasm add' :: Int -> Int -> Int;
+--foreign export wasm add' :: Int -> Int -> Int;
+add' :: Int -> Int -> Int;
 add' x = (+) x;
 
 apply1 :: (a -> b) -> a -> b;

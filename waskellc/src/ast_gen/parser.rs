@@ -216,10 +216,7 @@ impl Type {
                 Token::ReservedOperator(op) if op == "->" => {
                     break;
                 }
-                Token::Special(';') => {
-                    break;
-                }
-                Token::Special(')') => {
+                Token::Special(op) if op == ';' || op == ')' => {
                     break;
                 }
                 _ => {
@@ -375,6 +372,7 @@ pub struct FunctionDeclaration {
 }
 
 impl FunctionDeclaration {
+    // TODO: definition of operators would be here: parse "pat varop pat"
     fn parse(name: String, input: &mut TokenIter) -> Result<Self, String> {
         let mut lhs = vec![];
         let next = next_token(input, true)?;
@@ -406,18 +404,17 @@ impl FunctionDeclaration {
 #[derive(Debug)]
 pub enum FunctionParameterPattern {
     AsPattern(String, Option<Box<FunctionParameterPattern>>),
-    //ConstructorPattern(String),
+    ConstructorPattern(String),
     //UnitPattern,
     //EmptyListPattern,
     //EmptyTuplePattern(i32),
     //StringLiteral(String),
-    //IntegerLiteral(i64),
+    IntegerLiteral(i32),
     //CharLiteral(char),
     Wildcard,
-    //ParenthesizedPattern(Box<Pattern>),
+    ParenthesizedPattern(Box<Pattern>),
     //TuplePattern(Vec<Pattern>),
     //ListPattern(Vec<Pattern>),
-    //NegatedIntegerLiteral(i64),
 }
 
 impl FunctionParameterPattern {
@@ -427,7 +424,7 @@ impl FunctionParameterPattern {
         match next_token(input, false)? {
             Token::VariableIdent(ident) => {
                 match next_token(input, true)? {
-                    Token::Special('@') => {
+                    Token::ReservedOperator(op) if op == "@" => {
                         input.next(); // consume the '@'
                         Ok(AsPattern(
                             ident,
@@ -437,18 +434,67 @@ impl FunctionParameterPattern {
                     _ => Ok(AsPattern(ident, None)),
                 }
             }
+            // TODO: could be empty list or empty tuple
+            Token::ConstructorIdent(ident) => Ok(ConstructorPattern(ident)),
+            Token::Special('(') => {
+                let pattern = Box::new(Pattern::parse(input)?);
+                match next_token(input, false)? {
+                    Token::Special(')') => Ok(ParenthesizedPattern(pattern)),
+                    t => Err(format!("Expected ')', got {:?}", t)),
+                }
+            }
+            Token::Integer(i) => Ok(IntegerLiteral(i)),
             Token::ReservedIdent(ident) if ident == "_" => Ok(Wildcard),
             t => Err(format!("Expected variable identifier, got {:?}", t)),
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Pattern {
     FunctionParameterPattern(FunctionParameterPattern),
     ConstructorPattern(String, Vec<FunctionParameterPattern>),
+    NegatedIntegerLiteral(i32),
     //InfixConstructorPattern(String, Box<Pattern>, Box<Pattern>),
+}
+
+impl Pattern {
+    fn parse(input: &mut TokenIter) -> Result<Self, String> {
+        match next_token(input, true)? {
+            Token::ConstructorIdent(ident) => {
+                input.next(); // consume the constructor
+
+                if let Token::Special(')') = next_token(input, true)? {
+                    return Ok(Pattern::FunctionParameterPattern(
+                        FunctionParameterPattern::ConstructorPattern(ident),
+                    ));
+                }
+
+                let mut patterns = vec![];
+                loop {
+                    if matches!(next_token(input, true)?, Token::Special(')')) {
+                        break;
+                    }
+
+                    let elem = FunctionParameterPattern::parse(input)?;
+                    patterns.push(elem);
+                }
+
+                Ok(Pattern::ConstructorPattern(ident, patterns))
+            }
+            Token::ReservedOperator(op) if op == "-" => {
+                input.next(); // consume the '-'
+                match next_token(input, false)? {
+                    Token::Integer(i) => Ok(Pattern::NegatedIntegerLiteral(i)),
+                    t => Err(format!("Expected integer literal, got {:?}", t)),
+                }
+            }
+            _ => {
+                let elem = FunctionParameterPattern::parse(input)?;
+                Ok(Pattern::FunctionParameterPattern(elem))
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -555,6 +601,7 @@ impl LeftHandSideExpression {
                         Token::Special('(')
                         | Token::Special('[')
                         | Token::VariableIdent(_)
+                        | Token::ConstructorIdent(_)
                         | Token::String(_)
                         | Token::Integer(_)
                         | Token::Char(_) => continue,
@@ -570,7 +617,7 @@ impl LeftHandSideExpression {
 #[derive(Debug)]
 pub enum FunctionParameterExpression {
     StringLiteral(String),
-    IntegerLiteral(i64),
+    IntegerLiteral(i32),
     CharLiteral(char),
     Variable(String),
     Constructor(String),

@@ -6,5 +6,5 @@ mod symbol_check;
 mod type_check;
 
 pub use symbol_check::{
-    validate, Expression, Symbol, SymbolTable, Type, TypeConstructor, TypeConstructorTable,
+    validate, CaseBranch, CaseBranchPattern, CaseExpression, Expression, Symbol, SymbolTable, Type,
 };

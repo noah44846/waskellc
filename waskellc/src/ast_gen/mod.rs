@@ -8,5 +8,5 @@ mod parser;
 pub use parser::{
     parse, DataConstructor, DataDeclaration, Expression, FunctionDeclaration,
     FunctionParameterExpression, FunctionParameterPattern, FunctionType, LeftHandSideExpression,
-    TopDeclaration, TopDeclarations, Type, TypeApplicationElement,
+    Pattern, TopDeclaration, TopDeclarations, Type, TypeApplicationElement,
 };

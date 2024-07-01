@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use std::{collections::HashMap, fmt, slice};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc, slice};
 
 use itertools::Itertools;
 
@@ -196,11 +196,14 @@ impl TypeVarAssignments {
     }
 }
 
-pub fn type_check_syms(symbol_table: &mut SymbolTable) -> Result<(), String> {
-    for symbol in symbol_table.values() {
-        type_check_sym(&mut symbol.as_ref().borrow_mut())?;
+pub fn type_check_syms(symbol_table: SymbolTable) -> Result<SymbolTable, String> {
+    let mut res = HashMap::new();
+    for (name, symbol) in symbol_table.into_iter() {
+        let mut sym = symbol.as_ref().borrow().clone();
+        type_check_sym(&mut sym)?;
+        res.insert(name, Rc::new(RefCell::new(sym)));
     }
-    Ok(())
+    Ok(res)
 }
 
 fn type_check_sym(symbol: &mut Symbol) -> Result<(), String> {
@@ -241,7 +244,7 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
                 let mut lambda_params = vec![];
                 for i in 0..tys.len() - 1 {
                     lambda_params.push(format!("lambda_{}", i));
-                    exprs.push(Expression::FunctionParameter(lambda_params[i].clone()));
+                    exprs.push(Expression::ScopeSymbol(lambda_params[i].clone()));
                 }
 
                 *expr = Expression::LambdaAbstraction(lambda_params, Box::new(expr.clone()));
@@ -277,14 +280,14 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
 
                     match expr.as_mut() {
                         Expression::FunctionApplication(ref mut exprs) => {
-                            exprs.push(Expression::FunctionParameter(params[i].clone()));
+                            exprs.push(Expression::ScopeSymbol(params[i].clone()));
                         }
                         Expression::Symbol(_)
-                        | Expression::FunctionParameter(_)
+                        | Expression::ScopeSymbol(_)
                         | Expression::LambdaAbstraction(_, _) => {
                             **expr = Expression::FunctionApplication(vec![
                                 *expr.clone(),
-                                Expression::FunctionParameter(params[i].clone()),
+                                Expression::ScopeSymbol(params[i].clone()),
                             ]);
                         }
                         Expression::IntLiteral(_)
@@ -296,6 +299,7 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
                                 expr
                             ))?;
                         }
+                        _ => todo!("{:?}", expr),
                     }
                 }
             }
@@ -373,7 +377,7 @@ fn type_check_expr(
         Expression::CharLiteral(_) => Ok(Type::Char),
         Expression::UnitValue => Ok(Type::Unit),
         Expression::Symbol(symbol) => Ok(symbol.as_ref().borrow().ty.clone()),
-        Expression::FunctionParameter(name) => {
+        Expression::ScopeSymbol(name) => {
             let ty = scope
                 .iter()
                 .find(|(param_name, _)| param_name == name)
@@ -434,6 +438,129 @@ fn type_check_expr(
             };
 
             Ok(ret_ty)
+        }
+        Expression::Tuple(exprs) => {
+            let tys = exprs
+                .iter_mut()
+                .map(|expr| type_check_expr(expr, scope, type_var_assigns))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Type::Tuple(tys))
+        }
+        Expression::CaseExpression(CaseExpression {
+            input_expr,
+            input_ty,
+            branches,
+        }) => {
+            fn extend_scope_for_pattern(
+                pattern: &CaseBranchPattern,
+                scope: &mut Vec<(String, Type)>,
+                input_ty: &Type,
+            ) -> Result<(), String> {
+                match pattern {
+                    CaseBranchPattern::AsPattern(var_name, as_pattern) => {
+                        scope.push((var_name.clone(), input_ty.clone()));
+                        if let Some(as_pattern) = as_pattern {
+                            extend_scope_for_pattern(as_pattern, scope, input_ty)?;
+                        }
+                        Ok(())
+                    }
+                    CaseBranchPattern::Wildcard => Ok(()),
+                    CaseBranchPattern::IntLiteral(_) => {
+                        // TODO: make sure the input type never a type var
+                        if !matches!(input_ty, Type::Int) {
+                            return Err(format!(
+                                "Int pattern has type {:?} but input has type {:?}",
+                                pattern, input_ty
+                            ));
+                        }
+                        Ok(())
+                    }
+                    CaseBranchPattern::Constructor {
+                        data_constructor,
+                        fields,
+                    } => {
+                        let symbol = data_constructor.as_ref().borrow();
+                        // TODO: type constructors not handled
+                        let ret_ty = symbol.return_type().unwrap().clone();
+                        if ret_ty != *input_ty {
+                            return Err(format!(
+                                "Data constructor {} has type {:?} but pattern has type {:?}",
+                                symbol.name, symbol.ty, input_ty
+                            ));
+                        }
+
+                        if fields.len() != symbol.arity().into() {
+                            return Err(format!(
+                                "Data constructor {} has {} fields but pattern has {}",
+                                symbol.name,
+                                symbol.arity(),
+                                fields.len()
+                            ));
+                        }
+
+                        let tys = (0..fields.len()).map(|i| symbol.param_type(i).unwrap());
+
+                        for (field, ty) in fields.iter().zip(tys) {
+                            extend_scope_for_pattern(field, scope, ty)?;
+                        }
+
+                        Ok(())
+                    }
+                    CaseBranchPattern::Tuple(patterns) => {
+                        if let Type::Tuple(tys) = input_ty {
+                            if patterns.len() != tys.len() {
+                                return Err(format!(
+                                    "Tuple pattern has {} elements but input has {}",
+                                    patterns.len(),
+                                    tys.len()
+                                ));
+                            }
+
+                            for (pattern, ty) in patterns.iter().zip(tys.iter()) {
+                                extend_scope_for_pattern(pattern, scope, ty)?;
+                            }
+                            Ok(())
+                        } else {
+                            Err(format!(
+                                "Tuple pattern has type {:?} but input has type {:?}",
+                                patterns, input_ty
+                            ))
+                        }
+                    }
+                }
+            }
+
+            let expr_ty = type_check_expr(input_expr, scope, type_var_assigns)?;
+
+            // TODO: check if this is ok
+            if !type_var_assigns.check(input_ty, &expr_ty) {
+                return Err(format!(
+                    "Input expression has type {:#?} but expected {:#?}",
+                    expr_ty, input_ty
+                ));
+            }
+
+            let mut branch_tys = vec![];
+            for branch in branches.iter_mut() {
+                let CaseBranch {
+                    pattern,
+                    branch_expr,
+                } = branch;
+                let mut branch_scope = scope.clone();
+                extend_scope_for_pattern(pattern, &mut branch_scope, &expr_ty)?;
+                let branch_ty = type_check_expr(branch_expr, &mut branch_scope, type_var_assigns)?;
+                branch_tys.push(branch_ty);
+            }
+
+            if branch_tys
+                .iter()
+                // TODO: check if this is ok
+                .all(|ty| type_var_assigns.check(&branch_tys[0], ty))
+            {
+                Ok(branch_tys[0].clone())
+            } else {
+                Err(format!("Branches have different types {:#?}", branch_tys))
+            }
         }
         Expression::LambdaAbstraction(_, _) => unimplemented!("Lambda abstraction"),
     };
