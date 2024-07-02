@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
     rc::Rc,
@@ -127,7 +127,7 @@ pub enum Type {
         var_name: String,
         ctx_symbol_name: String,
     },
-    CustomType(String),
+    CustomType(String, Vec<Type>),
 }
 
 #[derive(PartialEq, Clone)]
@@ -286,13 +286,13 @@ fn data_decl_to_symbol(
             })
             .collect::<Result<Vec<Type>, String>>()?;
 
+        // TODO: add support for type constructors with fields
+        let custom_ty = Type::CustomType(ty_constructor.as_ref().borrow().name.clone(), vec![]);
         // add constructor return type
         let ty = if fields.is_empty() {
-            Type::CustomType(ty_constructor.as_ref().borrow().name.clone())
+            custom_ty
         } else {
-            fields.push(Type::CustomType(
-                ty_constructor.as_ref().borrow().name.clone(),
-            ));
+            fields.push(custom_ty);
             Type::Function(fields)
         };
 
@@ -326,17 +326,7 @@ fn function_type_to_symbol(
         return Err(format!("Symbol {} already exists", name));
     }
 
-    let tys = func_ty
-        .0
-        .iter()
-        .map(|ty| parser_type_to_type(type_constructor_table, ty, &name))
-        .collect::<Result<Vec<Type>, String>>()?;
-
-    let ty = if tys.len() == 1 {
-        flatten_function_ty(&tys[0])?
-    } else {
-        flatten_function_ty(&Type::Function(tys))?
-    };
+    let ty = parser_func_type_to_type(type_constructor_table, func_ty, &name)?;
 
     symbol_table.insert(
         name.clone(),
@@ -357,6 +347,24 @@ fn function_type_to_symbol(
     Ok(())
 }
 
+fn parser_func_type_to_type(
+    type_constructor_table: &mut TypeConstructorTable,
+    func_ty: &ast_gen::FunctionType,
+    name: &str,
+) -> Result<Type, String> {
+    let tys = func_ty
+        .0
+        .iter()
+        .map(|ty| parser_type_to_type(type_constructor_table, ty, name))
+        .collect::<Result<Vec<Type>, String>>()?;
+
+    if tys.len() == 1 {
+        Ok(flatten_function_ty(&tys[0])?)
+    } else {
+        Ok(flatten_function_ty(&Type::Function(tys))?)
+    }
+}
+
 fn parser_type_to_type(
     type_constructor_table: &mut TypeConstructorTable,
     parser_type: &ast_gen::Type,
@@ -367,39 +375,60 @@ fn parser_type_to_type(
         return Err("Type applications not supported yet".to_string());
     }
 
-    if let Some(ty) = parser_type.0.first() {
-        let ty = match ty {
-            ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
-                "Int" => Type::Int,
-                "Char" => Type::Char,
-                // TODO: add support for type aliases
-                "String" => Type::List(Box::new(Type::Char)),
-                _ => {
-                    if let Some(data_decl) = type_constructor_table.get(ty_con) {
-                        Type::CustomType(data_decl.as_ref().borrow().name.clone())
-                    } else {
-                        return Err(format!("Type constructor {} not found", ty_con));
-                    }
+    let first_ty = parser_type.0.first().ok_or("Empty type not allowed")?;
+    let ty = match first_ty {
+        ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
+            "Int" => Type::Int,
+            "Char" => Type::Char,
+            // TODO: add support for type aliases
+            //"String" => Type::List(Box::new(Type::Char)),
+            _ => {
+                if let Some(data_decl) = type_constructor_table.get(ty_con) {
+                    // TODO: add support for type constructors with fields
+                    // requiers_more_tys = true;
+                    Type::CustomType(data_decl.as_ref().borrow().name.clone(), vec![])
+                } else {
+                    return Err(format!("Type constructor {} not found", ty_con));
                 }
-            },
-            ast_gen::TypeApplicationElement::Unit => Type::Unit,
-            ast_gen::TypeApplicationElement::ParenthesizedType(ty) => {
-                let mut res = vec![];
-                for ty in &ty.0 {
-                    res.push(parser_type_to_type(type_constructor_table, ty, name)?);
-                }
-
-                Type::Function(res)
             }
-            ast_gen::TypeApplicationElement::TypeVariable(ty_var) => Type::TypeVar {
-                var_name: ty_var.clone(),
-                ctx_symbol_name: name.to_string(),
-            },
-        };
+        },
+        ast_gen::TypeApplicationElement::Unit => Type::Unit,
+        ast_gen::TypeApplicationElement::TypeVariable(ty_var) => Type::TypeVar {
+            var_name: ty_var.clone(),
+            ctx_symbol_name: name.to_string(),
+        },
+        ast_gen::TypeApplicationElement::ParenthesizedType(ty) => {
+            parser_func_type_to_type(type_constructor_table, ty, name)?
+        }
+        ast_gen::TypeApplicationElement::TupleType(tys) => {
+            let mut res = vec![];
+            for ty in tys {
+                res.push(parser_func_type_to_type(type_constructor_table, ty, name)?);
+            }
 
-        return Ok(ty);
-    }
-    Err("No type found".to_string())
+            Type::Tuple(res)
+        }
+
+        ast_gen::TypeApplicationElement::TupleConstructor(n) => {
+            if parser_type.0.len() != (n + 1) as usize {
+                return Err(format!(
+                    "Tuple constructor takes {} arguments, but got {}",
+                    n,
+                    parser_type.0.len() - 1
+                ));
+            }
+
+            let mut res = vec![];
+            for ty in parser_type.0.iter().skip(1) {
+                let ty = ast_gen::Type(vec![ty.clone()]);
+                res.push(parser_type_to_type(type_constructor_table, &ty, name)?);
+            }
+
+            Type::Tuple(res)
+        }
+    };
+
+    Ok(ty)
 }
 
 fn add_function_decl_to_symbol(
@@ -546,6 +575,8 @@ fn parser_pattern_to_branch_pattern(
         ast_gen::FunctionParameterPattern::IntegerLiteral(val) => {
             Ok(CaseBranchPattern::IntLiteral(*val))
         }
+        ast_gen::FunctionParameterPattern::CharLiteral(_) => todo!(),
+        ast_gen::FunctionParameterPattern::StringLiteral(_) => todo!(),
         ast_gen::FunctionParameterPattern::ConstructorPattern(constructor) => {
             let symbol = symbol_table
                 .get(constructor)
@@ -603,13 +634,30 @@ fn parser_pattern_to_branch_pattern(
                 }
             }
         }
+        ast_gen::FunctionParameterPattern::TuplePattern(patterns) => {
+            let patterns = patterns
+                .iter()
+                .map(|pat| {
+                    let pat = ast_gen::FunctionParameterPattern::ParenthesizedPattern(Box::new(
+                        pat.clone(),
+                    ));
+                    parser_pattern_to_branch_pattern(&pat, scope, symbol_table)
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+
+            Ok(CaseBranchPattern::Tuple(patterns))
+        }
+        ast_gen::FunctionParameterPattern::EmptyTuplePattern(_) => {
+            Err("Empty tuple pattern".to_string())
+        }
+        ast_gen::FunctionParameterPattern::UnitPattern => todo!(),
     }
 }
 
 fn parser_expr_to_expr(
     parser_expr: &ast_gen::Expression,
     scope: &[String],
-    symbol_table: &SymbolTable,
+    symbol_table: &mut SymbolTable,
 ) -> Result<Expression, String> {
     match parser_expr {
         ast_gen::Expression::InfixedApplication(lhs, op, rhs) => {
@@ -643,7 +691,7 @@ fn parser_expr_to_expr(
 fn parser_lhs_expr_to_expr(
     lhs_expr: &ast_gen::LeftHandSideExpression,
     scope: &[String],
-    symbol_table: &SymbolTable,
+    symbol_table: &mut SymbolTable,
 ) -> Result<Expression, String> {
     match lhs_expr {
         ast_gen::LeftHandSideExpression::FunctionApplication(params) => {
@@ -671,7 +719,7 @@ fn parser_lhs_expr_to_expr(
 fn parser_fn_param_expr_to_expr(
     fn_arg_expr: &ast_gen::FunctionParameterExpression,
     scope: &[String],
-    symbol_table: &SymbolTable,
+    symbol_table: &mut SymbolTable,
 ) -> Result<Expression, String> {
     match fn_arg_expr {
         ast_gen::FunctionParameterExpression::Variable(name) => {
@@ -708,6 +756,54 @@ fn parser_fn_param_expr_to_expr(
         }
         ast_gen::FunctionParameterExpression::CharLiteral(c) => Ok(Expression::CharLiteral(*c)),
         ast_gen::FunctionParameterExpression::Unit => Ok(Expression::UnitValue),
+        ast_gen::FunctionParameterExpression::TupleExpr(exprs) => {
+            let exprs = exprs
+                .iter()
+                .map(|expr| parser_expr_to_expr(expr, scope, symbol_table))
+                .collect::<Result<Vec<_>, String>>()?;
+            Ok(Expression::Tuple(exprs))
+        }
+        ast_gen::FunctionParameterExpression::EmptyTuple(n) => {
+            let commas = vec![','; (*n - 1) as usize].into_iter().collect::<String>();
+            let func_name = format!("({})", commas);
+
+            if let Entry::Vacant(entry) = symbol_table.entry(func_name.clone()) {
+                let expr = Expression::LambdaAbstraction(
+                    (0..*n).map(|i| format!(":{}", i)).collect(),
+                    Box::new(Expression::Tuple(
+                        (0..*n)
+                            .map(|i| Expression::ScopeSymbol(format!(":{}", i)))
+                            .collect(),
+                    )),
+                );
+                let ty_vars = (0..*n)
+                    .map(|i| Type::TypeVar {
+                        var_name: format!(":{}", i),
+                        ctx_symbol_name: func_name.clone(),
+                    })
+                    .collect::<Vec<_>>();
+
+                let ty = Type::Function(
+                    ty_vars
+                        .iter()
+                        .chain(std::iter::once(&Type::Tuple(ty_vars.clone())))
+                        .cloned()
+                        .collect(),
+                );
+
+                let symbol = Rc::new(RefCell::new(Symbol {
+                    name: func_name.clone(),
+                    ty,
+                    expr: Some(expr),
+                    data_constructor_idx: None,
+                    is_foreign: IsForeign::Exported,
+                }));
+                entry.insert(symbol);
+            }
+            Ok(Expression::Symbol(
+                symbol_table.get(&func_name).unwrap().clone(),
+            ))
+        }
     }
 }
 

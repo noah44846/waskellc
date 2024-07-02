@@ -11,10 +11,7 @@ fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
         iter.next()
     };
     match next {
-        Some(token) => match token {
-            Ok(token) => Ok(token),
-            Err(_) => Err("Error parsing token".to_string()),
-        },
+        Some(token) => token.map_err(|e| e.to_string()),
         None => Err("Unexpected end of input".to_string()),
     }
 }
@@ -216,12 +213,10 @@ impl Type {
                 Token::ReservedOperator(op) if op == "->" => {
                     break;
                 }
-                Token::Special(op) if op == ';' || op == ')' => {
+                Token::Special(op) if op == ';' || op == ')' || op == ',' => {
                     break;
                 }
-                _ => {
-                    continue;
-                }
+                _ => {}
             }
         }
 
@@ -233,10 +228,10 @@ impl Type {
 pub enum TypeApplicationElement {
     Unit,
     //ListConstructor,
-    //TupleConstructor(i32),
+    TupleConstructor(i32),
     //FunctionConstructor,
-    //ListType(Box<Type>),
-    //TupleType(Vec<Type>),
+    //ListType(Box<FunctionType>),
+    TupleType(Vec<FunctionType>),
     TypeVariable(String),
     ParenthesizedType(Box<FunctionType>),
     TypeConstructor(String),
@@ -254,24 +249,43 @@ impl TypeApplicationElement {
                         return Ok(TypeApplicationElement::Unit);
                     }
                     Token::Special(',') => {
-                        todo!("unapplied tuple type");
+                        input.next(); // consume the ','
+                        let mut count = 2;
+                        loop {
+                            match next_token(input, false)? {
+                                Token::Special(',') => {
+                                    count += 1;
+                                    continue;
+                                }
+                                Token::Special(')') => {
+                                    return Ok(TypeApplicationElement::TupleConstructor(count));
+                                }
+                                t => Err(format!(
+                                    "Expected ',' or ')' after '(' in tuple type constructor, got {:?}",
+                                    t,
+                                ))?,
+                            }
+                        }
                     }
                     Token::ReservedOperator(op) if op == "->" => {
-                        todo!("unapplied function type");
+                        unimplemented!("Function type application")
                     }
                     _ => {}
                 };
 
-                // Parse function type
+                let mut types = vec![];
                 loop {
-                    let elem = FunctionType::parse(input)?;
-                    match next_token(input, true)? {
-                        Token::Special(',') => {
-                            todo!("Tuple types");
-                        }
+                    types.push(FunctionType::parse(input)?);
+                    match next_token(input, false)? {
+                        Token::Special(',') => {}
                         Token::Special(')') => {
-                            input.next(); // consume the ')'
-                            return Ok(TypeApplicationElement::ParenthesizedType(Box::new(elem)));
+                            if types.len() == 1 {
+                                return Ok(TypeApplicationElement::ParenthesizedType(Box::new(
+                                    types.pop().unwrap(),
+                                )));
+                            } else {
+                                return Ok(TypeApplicationElement::TupleType(types));
+                            }
                         }
                         _ => Err(format!(
                             "Expected ',' or ')' after type in parenthesized type, got {:?}",
@@ -279,6 +293,27 @@ impl TypeApplicationElement {
                         ))?,
                     }
                 }
+            }
+            Token::Special('[') => {
+                todo!();
+                //input.next();  consume the '['
+
+                //if let Token::Special(']') = next_token(input, true)? {
+                //input.next();  consume the ']'
+                //return Ok(TypeApplicationElement::ListConstructor);
+                //}
+
+                //let elem = Box::new(FunctionType::parse(input)?);
+                //let next = next_token(input, false)?;
+                //if matches!(next, Token::Special(']')) {
+                //input.next();  consume the ']'
+                //return Ok(TypeApplicationElement::ListType(elem));
+                //} else {
+                //return Err(format!(
+                //"Expected ']' after type in list type, got {:?}",
+                //next
+                //));
+                //}
             }
             t => todo!("Type parsing for lists and type variables: {:?}", t),
         }
@@ -401,19 +436,19 @@ impl FunctionDeclaration {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FunctionParameterPattern {
     AsPattern(String, Option<Box<FunctionParameterPattern>>),
     ConstructorPattern(String),
-    //UnitPattern,
+    UnitPattern,
+    EmptyTuplePattern(i32),
     //EmptyListPattern,
-    //EmptyTuplePattern(i32),
-    //StringLiteral(String),
+    StringLiteral(String),
     IntegerLiteral(i32),
-    //CharLiteral(char),
+    CharLiteral(char),
     Wildcard,
     ParenthesizedPattern(Box<Pattern>),
-    //TuplePattern(Vec<Pattern>),
+    TuplePattern(Vec<Pattern>),
     //ListPattern(Vec<Pattern>),
 }
 
@@ -437,20 +472,86 @@ impl FunctionParameterPattern {
             // TODO: could be empty list or empty tuple
             Token::ConstructorIdent(ident) => Ok(ConstructorPattern(ident)),
             Token::Special('(') => {
-                let pattern = Box::new(Pattern::parse(input)?);
-                match next_token(input, false)? {
-                    Token::Special(')') => Ok(ParenthesizedPattern(pattern)),
-                    t => Err(format!("Expected ')', got {:?}", t)),
+                match next_token(input, true)? {
+                    Token::Special(')') => {
+                        input.next(); // consume the ')'
+                        return Ok(UnitPattern);
+                    }
+                    Token::Special(',') => {
+                        input.next(); // consume the ','
+                        let mut count = 2;
+                        loop {
+                            match next_token(input, false)? {
+                                Token::Special(',') => {
+                                    count += 1;
+                                    continue;
+                                }
+                                Token::Special(')') => {
+                                    return Ok(EmptyTuplePattern(count));
+                                }
+                                t => Err(format!(
+                                    "Expected ',' or ')' after '(' in tuple pattern, got {:?}",
+                                    t,
+                                ))?,
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                let mut patterns = vec![];
+                loop {
+                    patterns.push(Pattern::parse(input)?);
+                    match next_token(input, false)? {
+                        Token::Special(',') => {}
+                        Token::Special(')') => {
+                            if patterns.len() == 1 {
+                                return Ok(ParenthesizedPattern(Box::new(patterns.pop().unwrap())));
+                            } else {
+                                return Ok(TuplePattern(patterns));
+                            }
+                        }
+                        t => Err(format!(
+                            "Expected ',' or ')' after pattern in parenthesized pattern, got {:?}",
+                            t,
+                        ))?,
+                    }
                 }
             }
+            Token::Special('[') => {
+                todo!();
+                //input.next(); // consume the '['
+
+                //if let Token::Special(']') = next_token(input, true)? {
+                //input.next(); // consume the ']'
+                //return Ok(EmptyListPattern);
+                //}
+
+                //let mut types = vec![];
+                //loop {
+                //types.push(Pattern::parse(input)?);
+                //match next_token(input, false)? {
+                //Token::Special(',') => {}
+                //Token::Special(']') => {
+                //return Ok(FunctionParameterPattern::ListPattern(types));
+                //}
+                //t => Err(format!(
+                //"Expected ',' or ']' after pattern in list pattern, got {:?}",
+                //t,
+                //))?,
+                //}
+                //}
+            }
             Token::Integer(i) => Ok(IntegerLiteral(i)),
+            Token::Char(c) => Ok(CharLiteral(c)),
+            Token::String(s) => Ok(StringLiteral(s)),
             Token::ReservedIdent(ident) if ident == "_" => Ok(Wildcard),
             t => Err(format!("Expected variable identifier, got {:?}", t)),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Pattern {
     FunctionParameterPattern(FunctionParameterPattern),
     ConstructorPattern(String, Vec<FunctionParameterPattern>),
@@ -622,10 +723,10 @@ pub enum FunctionParameterExpression {
     Variable(String),
     Constructor(String),
     //EmptyList,
-    //EmptyTuple(i32),
+    EmptyTuple(i32),
     Unit,
     ParenthesizedExpr(Box<Expression>),
-    //TupleExpr(Vec<Expression>),
+    TupleExpr(Vec<Expression>),
     //ListExpr(Vec<Expression>),
     //ArithmeticSequence(Box<Expression>, Option<Box<Expression>>, Option<Box<Expression>>),
     //ListComprehension(Box<Expression>, ...),
@@ -643,6 +744,25 @@ impl FunctionParameterExpression {
                     input.next(); // consume the ')'
                     Ok(FunctionParameterExpression::Unit)
                 }
+                Token::Special(',') => {
+                    input.next(); // consume the ','
+                    let mut count = 2;
+                    loop {
+                        match next_token(input, false)? {
+                            Token::Special(',') => {
+                                count += 1;
+                                continue;
+                            }
+                            Token::Special(')') => {
+                                return Ok(FunctionParameterExpression::EmptyTuple(count));
+                            }
+                            t => Err(format!(
+                                "Expected ',' or ')' after '(' in tuple expression, got {:?}",
+                                t,
+                            ))?,
+                        }
+                    }
+                }
                 Token::VariableSym(op) if op != "-" => {
                     input.next(); // consume the operator
                     match next_token(input, false)? {
@@ -651,13 +771,25 @@ impl FunctionParameterExpression {
                     }
                 }
                 _ => {
-                    let expr = Expression::parse(input)?;
-                    match next_token(input, false)? {
-                        Token::Special(')') => Ok(FunctionParameterExpression::ParenthesizedExpr(
-                            Box::new(expr),
-                        )),
-                        Token::Special(',') => todo!(),
-                        t => Err(format!("Expected ')', got {:?}", t)),
+                    let mut exprs = vec![];
+                    loop {
+                        exprs.push(Expression::parse(input)?);
+                        match next_token(input, false)? {
+                            Token::Special(',') => {}
+                            Token::Special(')') => {
+                                if exprs.len() == 1 {
+                                    return Ok(FunctionParameterExpression::ParenthesizedExpr(
+                                        Box::new(exprs.pop().unwrap()),
+                                    ));
+                                } else {
+                                    return Ok(FunctionParameterExpression::TupleExpr(exprs));
+                                }
+                            }
+                            t => Err(format!(
+                                "Expected ',' or ')' after expression in parenthesized expression, got {:?}",
+                                t,
+                            ))?,
+                        }
                     }
                 }
             },

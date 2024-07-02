@@ -15,7 +15,8 @@ use wasmtime::*;
 //mod ref_types;
 //mod tail_call;
 //mod code_gen;
-mod usage_example;
+//mod usage_example;
+mod waskell_types;
 
 fn main() -> Result<()> {
     //memory::memory_main()
@@ -25,5 +26,6 @@ fn main() -> Result<()> {
     //ref_types::ref_types_main()
     //tail_call::tail_call_main()
     //code_gen::code_gen_main()
-    usage_example::usage_example_main()
+    //usage_example::usage_example_main()
+    waskell_types::waskell_types_main()
 }

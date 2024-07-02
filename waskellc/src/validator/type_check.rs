@@ -83,6 +83,35 @@ impl TypeVarAssignments {
                     .remove(&ty2.try_into().unwrap())
                     .unwrap_or(ty2.try_into().unwrap());
 
+                if inner_ty1.concrete_ty.is_none() && inner_ty2.concrete_ty.is_none() {
+                    inner_ty1.ty.union(&mut inner_ty2.ty);
+
+                    self.0.insert(ty1.try_into().unwrap(), inner_ty1);
+                    self.0.insert(ty2.try_into().unwrap(), inner_ty2);
+
+                    return true;
+                } else if let Some(concrete_ty) = &inner_ty1.concrete_ty {
+                    self.0.insert(ty2.try_into().unwrap(), inner_ty2);
+                    self.assign_or_check(concrete_ty, ty2); // we know that the result is true
+                                                            // since this case can only return
+                                                            // false if the ty2 has a concrete
+                                                            // type which is not the case
+                    inner_ty2 = self
+                        .0
+                        .remove(&ty2.try_into().unwrap())
+                        .unwrap_or(ty2.try_into().unwrap());
+                } else if let Some(concrete_ty) = &inner_ty2.concrete_ty {
+                    self.0.insert(ty1.try_into().unwrap(), inner_ty1);
+                    self.assign_or_check(ty1, concrete_ty); // we know that the result is true
+                                                            // since this case can only return
+                                                            // false if the ty1 has a concrete
+                                                            // type which is not the case
+                    inner_ty1 = self
+                        .0
+                        .remove(&ty1.try_into().unwrap())
+                        .unwrap_or(ty1.try_into().unwrap());
+                }
+
                 let res = if inner_ty1.concrete_ty == inner_ty2.concrete_ty {
                     inner_ty1.ty.union(&mut inner_ty2.ty);
                     true
@@ -95,23 +124,6 @@ impl TypeVarAssignments {
 
                 res
             }
-            (Type::TypeVar { .. }, Type::Function(_)) => {
-                let mut inner_ty1 = self
-                    .0
-                    .remove(&ty1.try_into().unwrap())
-                    .unwrap_or(ty1.try_into().unwrap());
-
-                let res = if let Some(concrete_ty) = &inner_ty1.concrete_ty {
-                    self.assign_or_check(concrete_ty, ty2)
-                } else {
-                    inner_ty1.concrete_ty = Some(ty2.clone());
-                    true
-                };
-
-                self.0.insert(ty1.try_into().unwrap(), inner_ty1);
-
-                res
-            }
             (Type::TypeVar { .. }, _) => {
                 let mut inner_ty1 = self
                     .0
@@ -121,6 +133,12 @@ impl TypeVarAssignments {
                 let res = if let Some(concrete_ty) = &inner_ty1.concrete_ty {
                     self.assign_or_check(concrete_ty, ty2)
                 } else {
+                    let root = inner_ty1.ty.find();
+                    for (_, inner_ty) in self.0.iter_mut() {
+                        if inner_ty.ty.find() == root {
+                            inner_ty.concrete_ty = Some(ty2.clone());
+                        }
+                    }
                     inner_ty1.concrete_ty = Some(ty2.clone());
                     true
                 };
@@ -131,6 +149,15 @@ impl TypeVarAssignments {
             }
             (_, Type::TypeVar { .. }) => self.assign_or_check(ty2, ty1),
             (Type::Function(tys1), Type::Function(tys2)) => {
+                if tys1.len() != tys2.len() {
+                    return false;
+                }
+
+                tys1.iter()
+                    .zip(tys2.iter())
+                    .all(|(ty1, ty2)| self.assign_or_check(ty1, ty2))
+            }
+            (Type::Tuple(tys1), Type::Tuple(tys2)) => {
                 if tys1.len() != tys2.len() {
                     return false;
                 }
@@ -183,6 +210,15 @@ impl TypeVarAssignments {
             }
             (_, Type::TypeVar { .. }) => self.check(ty2, ty1),
             (Type::Function(tys1), Type::Function(tys2)) => {
+                if tys1.len() != tys2.len() {
+                    return false;
+                }
+
+                tys1.iter()
+                    .zip(tys2.iter())
+                    .all(|(ty1, ty2)| self.check(ty1, ty2))
+            }
+            (Type::Tuple(tys1), Type::Tuple(tys2)) => {
                 if tys1.len() != tys2.len() {
                     return false;
                 }
@@ -309,9 +345,10 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
 
             if !ty_var_assigns.check(&func_tys[func_tys.len() - 1], &expr_ty) {
                 return Err(format!(
-                    "Lambda expression has return type {:#?} but parent has {:#?}",
+                    "Lambda expression has return type {:#?} but parent has {:#?} with assignments {:#?}",
                     expr_ty,
-                    func_tys.last().unwrap()
+                    func_tys.last().unwrap(),
+                    ty_var_assigns,
                 ));
             }
 
@@ -373,8 +410,8 @@ fn type_check_expr(
 ) -> Result<Type, String> {
     let res: Result<Type, String> = match expr {
         Expression::IntLiteral(_) => Ok(Type::Int),
-        Expression::StringLiteral(_) => Ok(Type::List(Box::new(Type::Char))),
         Expression::CharLiteral(_) => Ok(Type::Char),
+        Expression::StringLiteral(_) => todo!(),
         Expression::UnitValue => Ok(Type::Unit),
         Expression::Symbol(symbol) => Ok(symbol.as_ref().borrow().ty.clone()),
         Expression::ScopeSymbol(name) => {

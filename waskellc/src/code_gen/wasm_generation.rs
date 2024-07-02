@@ -392,11 +392,15 @@ impl CodeGen {
 
         match &sym.ty {
             validator::Type::Function(params) => {
-                let num_params = params.len() - 1;
-
-                for i in 0..num_params {
-                    // TODO: change to one if it isn't a int
-                    instrs.push(Instruction::I32Const(0));
+                for (i, param) in params.iter().take(params.len() - 1).enumerate() {
+                    // TODO: doesn't work
+                    instrs.push(Instruction::I32Const(
+                        if matches!(param, validator::Type::Int) {
+                            0
+                        } else {
+                            1
+                        },
+                    ));
                     instrs.push(Instruction::LocalGet(i as u32));
                     instrs.push(Instruction::Call(make_val_idx));
                 }
@@ -700,6 +704,9 @@ impl CodeGen {
                 let make_env_idx = functions
                     .function_index(":make_env")
                     .ok_or("Function make_env not found in the function table")?;
+                let make_val_idx = functions
+                    .function_index(":make_val")
+                    .ok_or("Function make_val not found in the function table")?;
 
                 instrs.push(Instruction::I32Const((exprs.len() + 1) as i32));
                 instrs.push(Instruction::Call(make_env_idx));
@@ -732,6 +739,11 @@ impl CodeGen {
                         memory_index: 0,
                     }));
                 }
+
+                instrs.push(Instruction::I32Const(1));
+                instrs.push(Instruction::LocalGet(local_idx));
+                instrs.push(Instruction::Call(make_val_idx));
+                instrs.push(Instruction::LocalSet(local_idx));
 
                 Ok(local_idx)
             }
@@ -865,6 +877,18 @@ impl CodeGen {
                     let field_local_idx = locals.add_local(ValType::I32);
 
                     instrs.push(Instruction::LocalGet(input_local_idx));
+                    if !is_input_evaluated {
+                        is_input_evaluated = true;
+                        instrs.push(Instruction::Call(eval_idx));
+                        instrs.push(Instruction::I32Load(MemArg {
+                            // load data constructor env
+                            align: 2,
+                            offset: 1,
+                            memory_index: 0,
+                        }));
+                        instrs.push(Instruction::LocalTee(input_local_idx)); // store the data constructor env
+                    }
+
                     instrs.push(Instruction::I32Load(MemArg {
                         align: 2,
                         offset: ((i + 2) * 4) as u64,
