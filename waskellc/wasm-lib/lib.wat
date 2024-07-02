@@ -86,7 +86,7 @@
     (local.set $pap_env_cursor
       (i32.add
         (i32.load offset=12 (local.get $pap))   ;; load the pap's env
-        (i32.load offset=8 (local.get $pap)))) ;; add the offset of where to add the remaining params
+        (i32.load offset=8 (local.get $pap))))  ;; add the offset of where to add the remaining params
     (loop $loop
       (if
         (i32.eq (local.get $n_left) (i32.const 0))

@@ -24,42 +24,40 @@ boolMain :: Int;
 -- -100 + 100 + -100 = -100
 boolMain = boolToInt (if' (intToBool 0) True False) + boolToInt (if' (intToBool 1) True False) + boolToInt (and (or True False) (and False True));
 
---data List a = Nil | Cons a (List a);
-data IntList = Nil | Cons Int IntList;
+data List a = Nil | Cons a (List a);
 
-mapIntList :: (Int -> Int) -> IntList -> IntList;
-mapIntList _ Nil = Nil;
-mapIntList f (Cons x xs) = Cons (f x) (mapIntList f xs);
+map :: (a -> b) -> List a -> List b;
+map _ Nil = Nil;
+map f (Cons x xs) = Cons (f x) (map f xs);
 
-foldIntList :: (Int -> a -> a) -> a -> IntList -> a;
-foldIntList _ z Nil = z;
-foldIntList f z (Cons x xs) = f x (foldIntList f z xs);
+fold :: (b -> a -> b) -> b -> List a -> b;
+fold _ z Nil = z;
+fold f z (Cons x xs) = f x (fold f z xs);
 
-repeat :: Int -> IntList;
+repeat :: a -> List a;
 repeat x = Cons x (repeat x);
 
-take :: Int -> IntList -> IntList;
+take :: Int -> List a -> List a;
 take 0 _ = Nil;
 take n Nil = Nil;
 take n (Cons x xs) = Cons x (take (n - 1) xs);
 
+concat :: List a -> List a -> List a;
+concat Nil ys = ys;
+concat (Cons x xs) ys = Cons x (concat xs ys);
+
 listMain :: Int;
-listMain = foldIntList (+) 0 (take 10 (mapIntList ((*) 2) (repeat 1)));
+listMain = fold (+) 0 (take 10 (map ((*) 2) (repeat 1)));
 
---data Maybe a = Just a | Nothing;
-data IntMaybe = Just Int | Nothing;
+data Maybe a = Just a | Nothing;
 
-maybeToInt :: IntMaybe -> Int;
-maybeToInt (Just x) = x;
-maybeToInt Nothing = 0;
-
-maybeAdd :: IntMaybe -> IntMaybe -> IntMaybe;
-maybeAdd (Just x) (Just y) = Just (x + y);
-maybeAdd _ _ = Nothing;
+maybe :: b -> (a -> b) -> Maybe a -> b;
+maybe z _ Nothing = z;
+maybe _ f (Just x) = f x;
 
 maybeMain :: Int;
--- 1 + 2 + 0 = 3
-maybeMain = maybeToInt (maybeAdd (Just 1) (Just 2)) + maybeToInt (maybeAdd (Just 1) Nothing);
+-- (2 + 1) + 0 = 3
+maybeMain = (maybe 0 ((+) 2) (Just 1)) + (maybe 0 ((+) 1) Nothing);
 
 data Ratio = Ratio Int Int;
 
@@ -76,45 +74,45 @@ ratioMain :: Int;
 -- (1/2 + 1/3) * 12/2 = 5/6 * 6 = 5
 ratioMain = eval (ratioMul (ratioAdd (Ratio 1 2) (Ratio 1 3)) (Ratio 12 2));
 
-data IntTree = Empty | Node IntTree Int IntTree;
+data Tree a = Empty | Node (Tree a) a (Tree a);
 
-foreign export wasm empty :: IntTree;
-empty = Empty;
+--foreign export wasm empty :: Tree a;
+--empty = Empty;
 
-foreign export wasm node :: IntTree -> Int -> IntTree -> IntTree;
-node = Node;
+--foreign export wasm node :: Tree a -> a -> Tree a -> Tree a;
+--node = Node;
 
-foreign export wasm leaf :: Int -> IntTree;
+foreign export wasm leaf :: a -> Tree a;
 leaf x = Node Empty x Empty;
 
-mapIntTree :: (Int -> Int) -> IntTree -> IntTree;
-mapIntTree f Empty = Empty;
-mapIntTree f (Node l x r) = Node (mapIntTree f l) (f x) (mapIntTree f r);
+treeMap :: (a -> b) -> Tree a -> Tree b;
+treeMap f Empty = Empty;
+treeMap f (Node l x r) = Node (treeMap f l) (f x) (treeMap f r);
 
-foldIntTree :: (Int -> a -> a -> a) -> Int -> IntTree -> a;
-foldIntTree _ z Empty = z;
-foldIntTree f z (Node l x r) = f x (foldIntTree f z l) (foldIntTree f z r);
+treeFold :: (b -> a -> b -> b) -> b -> Tree a -> b;
+treeFold _ z Empty = z;
+treeFold f z (Node l x r) = f (treeFold f z l) x (treeFold f z r);
 
-flattenDfsAux :: IntTree -> IntList -> IntList;
-flattenDfsAux Empty xs = xs;
-flattenDfsAux (Node l x r) xs = flattenDfsAux l (Cons x (flattenDfsAux r xs));
+flattenHelper :: List a -> a -> List a -> List a;
+flattenHelper l x r = concat l (Cons x r);
 
-foreign export wasm flattenDfs :: IntTree -> IntList;
-flattenDfs t = flattenDfsAux t Nil;
+foreign export wasm flattenDfs :: Tree a -> List a;
+flattenDfs = treeFold flattenHelper Nil;
 
 add3 :: Int -> Int -> Int -> Int;
 add3 x y z = x + y + z;
 
-exampleTree :: IntTree;
+exampleTree :: Tree Int;
 exampleTree = Node (Node (leaf 1) 2 (leaf 3)) 4 (leaf 5);
 
-foreign export wasm exampleTreeFlattened :: IntList;
-exampleTreeFlattened = flattenDfs exampleTree;
+foreign export wasm exampleTreeFlattened :: List Int;
+exampleTreeFlattened = flattenDfs (treeMap ((*) 3) exampleTree);
 
 treeMain :: Int;
 -- 2*1 + 2*2 + 2*3 + 2*4 + 2*5 = 30
-treeMain = foldIntTree add3 0 (mapIntTree ((*) 2) exampleTree);
+treeMain = treeFold add3 0 (treeMap ((*) 2) exampleTree);
 
 main :: Int;
 -- -100 + 20 + 3 + 5 + 30 = -42
-main = boolMain + listMain + maybeMain + ratioMain + treeMain;
+-- -100 + 20 + 3 + 5 = -72
+main = boolMain + listMain + maybeMain + ratioMain -- + treeMain;

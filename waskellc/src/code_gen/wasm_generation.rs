@@ -395,6 +395,7 @@ impl CodeGen {
                 for (i, param) in params.iter().take(params.len() - 1).enumerate() {
                     // TODO: doesn't work
                     instrs.push(Instruction::I32Const(
+                        // TODO: change to one if it isn't a int
                         if matches!(param, validator::Type::Int) {
                             0
                         } else {
@@ -933,7 +934,9 @@ impl CodeGen {
             .function_index(":make_env")
             .expect("Function make_env not found in the function table");
 
-        instrs.push(Instruction::I32Const(params.len() as i32));
+        instrs.push(Instruction::I32Const(
+            (params.len() - (if func_idx.is_none() { 1 } else { 0 })) as i32,
+        ));
         instrs.push(Instruction::Call(make_env_idx));
         instrs.push(Instruction::LocalSet(local_idx));
 

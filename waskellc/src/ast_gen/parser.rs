@@ -323,7 +323,7 @@ impl TypeApplicationElement {
 #[derive(Debug)]
 pub struct DataDeclaration {
     pub ty_constructor: String,
-    // TODO: add support for type parameters
+    pub ty_vars: Vec<String>,
     pub data_constructors: Vec<DataConstructor>,
 }
 
@@ -334,11 +334,32 @@ impl DataDeclaration {
             t => return Err(format!("Expected constructor identifier, got {:?}", t)),
         };
 
+        // parse type variables
+        let mut ty_vars = vec![];
+        loop {
+            match next_token(input, true)? {
+                Token::VariableIdent(ident) => {
+                    input.next(); // consume the variable
+                    ty_vars.push(ident);
+                }
+                Token::ReservedOperator(op) if op == "=" => {
+                    break;
+                }
+                Token::Special(';') => {
+                    break;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
         if matches!(next_token(input, true)?, Token::ReservedOperator(op) if op == "=") {
             input.next(); // consume the '='
         } else {
             return Ok(DataDeclaration {
                 ty_constructor: name,
+                ty_vars,
                 data_constructors: vec![],
             });
         }
@@ -359,6 +380,7 @@ impl DataDeclaration {
 
         Ok(DataDeclaration {
             ty_constructor: name,
+            ty_vars,
             data_constructors: constructors,
         })
     }

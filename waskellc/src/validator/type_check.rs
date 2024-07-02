@@ -166,6 +166,15 @@ impl TypeVarAssignments {
                     .zip(tys2.iter())
                     .all(|(ty1, ty2)| self.assign_or_check(ty1, ty2))
             }
+            (Type::CustomType(name1, tys1), Type::CustomType(name2, tys2)) => {
+                if name1 != name2 {
+                    return false;
+                }
+
+                tys1.iter()
+                    .zip(tys2.iter())
+                    .all(|(ty1, ty2)| self.assign_or_check(ty1, ty2))
+            }
             _ => *ty1 == *ty2,
         }
     }
@@ -220,6 +229,15 @@ impl TypeVarAssignments {
             }
             (Type::Tuple(tys1), Type::Tuple(tys2)) => {
                 if tys1.len() != tys2.len() {
+                    return false;
+                }
+
+                tys1.iter()
+                    .zip(tys2.iter())
+                    .all(|(ty1, ty2)| self.check(ty1, ty2))
+            }
+            (Type::CustomType(name1, tys1), Type::CustomType(name2, tys2)) => {
+                if name1 != name2 {
                     return false;
                 }
 
@@ -343,7 +361,7 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
             let mut ty_var_assigns = TypeVarAssignments::new();
             let expr_ty = type_check_expr(expr, &mut scope, &mut ty_var_assigns)?;
 
-            if !ty_var_assigns.check(&func_tys[func_tys.len() - 1], &expr_ty) {
+            if !ty_var_assigns.assign_or_check(&func_tys[func_tys.len() - 1], &expr_ty) {
                 return Err(format!(
                     "Lambda expression has return type {:#?} but parent has {:#?} with assignments {:#?}",
                     expr_ty,
@@ -393,6 +411,7 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
         _ => type_check_expr(expr, &mut scope, &mut ty_var_assigns),
     }?;
 
+    // TODO: maybe assign_or_check should be used here
     if ty_var_assigns.check(parent_ty, &res.clone()) {
         Ok(())
     } else {
@@ -492,22 +511,28 @@ fn type_check_expr(
                 pattern: &CaseBranchPattern,
                 scope: &mut Vec<(String, Type)>,
                 input_ty: &Type,
+                type_var_assigns: &mut TypeVarAssignments,
             ) -> Result<(), String> {
                 match pattern {
                     CaseBranchPattern::AsPattern(var_name, as_pattern) => {
                         scope.push((var_name.clone(), input_ty.clone()));
                         if let Some(as_pattern) = as_pattern {
-                            extend_scope_for_pattern(as_pattern, scope, input_ty)?;
+                            extend_scope_for_pattern(
+                                as_pattern,
+                                scope,
+                                input_ty,
+                                type_var_assigns,
+                            )?;
                         }
                         Ok(())
                     }
                     CaseBranchPattern::Wildcard => Ok(()),
                     CaseBranchPattern::IntLiteral(_) => {
                         // TODO: make sure the input type never a type var
-                        if !matches!(input_ty, Type::Int) {
+                        if !type_var_assigns.assign_or_check(input_ty, &Type::Int) {
                             return Err(format!(
-                                "Int pattern has type {:?} but input has type {:?}",
-                                pattern, input_ty
+                                "Int pattern {:?} and input has type {:?} with assignments {:#?}",
+                                pattern, input_ty, type_var_assigns
                             ));
                         }
                         Ok(())
@@ -519,7 +544,7 @@ fn type_check_expr(
                         let symbol = data_constructor.as_ref().borrow();
                         // TODO: type constructors not handled
                         let ret_ty = symbol.return_type().unwrap().clone();
-                        if ret_ty != *input_ty {
+                        if !type_var_assigns.assign_or_check(input_ty, &ret_ty) {
                             return Err(format!(
                                 "Data constructor {} has type {:?} but pattern has type {:?}",
                                 symbol.name, symbol.ty, input_ty
@@ -538,7 +563,7 @@ fn type_check_expr(
                         let tys = (0..fields.len()).map(|i| symbol.param_type(i).unwrap());
 
                         for (field, ty) in fields.iter().zip(tys) {
-                            extend_scope_for_pattern(field, scope, ty)?;
+                            extend_scope_for_pattern(field, scope, ty, type_var_assigns)?;
                         }
 
                         Ok(())
@@ -554,7 +579,7 @@ fn type_check_expr(
                             }
 
                             for (pattern, ty) in patterns.iter().zip(tys.iter()) {
-                                extend_scope_for_pattern(pattern, scope, ty)?;
+                                extend_scope_for_pattern(pattern, scope, ty, type_var_assigns)?;
                             }
                             Ok(())
                         } else {
@@ -570,6 +595,7 @@ fn type_check_expr(
             let expr_ty = type_check_expr(input_expr, scope, type_var_assigns)?;
 
             // TODO: check if this is ok
+            // TODO: maybe assign_or_check should be used here
             if !type_var_assigns.check(input_ty, &expr_ty) {
                 return Err(format!(
                     "Input expression has type {:#?} but expected {:#?}",
@@ -584,7 +610,7 @@ fn type_check_expr(
                     branch_expr,
                 } = branch;
                 let mut branch_scope = scope.clone();
-                extend_scope_for_pattern(pattern, &mut branch_scope, &expr_ty)?;
+                extend_scope_for_pattern(pattern, &mut branch_scope, &expr_ty, type_var_assigns)?;
                 let branch_ty = type_check_expr(branch_expr, &mut branch_scope, type_var_assigns)?;
                 branch_tys.push(branch_ty);
             }
@@ -592,6 +618,7 @@ fn type_check_expr(
             if branch_tys
                 .iter()
                 // TODO: check if this is ok
+                // TODO: maybe assign_or_check should be used here
                 .all(|ty| type_var_assigns.check(&branch_tys[0], ty))
             {
                 Ok(branch_tys[0].clone())

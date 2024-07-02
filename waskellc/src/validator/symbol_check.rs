@@ -36,6 +36,7 @@ pub struct Symbol {
 #[derive(PartialEq, Clone)]
 struct TypeConstructor {
     pub name: String,
+    pub type_vars: Vec<(String, String)>,
     pub data_constructors: Vec<Rc<RefCell<Symbol>>>,
 }
 
@@ -43,6 +44,14 @@ impl fmt::Debug for TypeConstructor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TypeConstructor")
             .field("name", &self.name)
+            .field(
+                "type_vars",
+                &self
+                    .type_vars
+                    .iter()
+                    .map(|(ty_var, _)| ty_var)
+                    .collect::<Vec<_>>(),
+            )
             .field(
                 "data_constructors",
                 &self
@@ -246,6 +255,7 @@ fn data_decl_to_symbol(
 ) -> Result<(), String> {
     let ast_gen::DataDeclaration {
         ty_constructor,
+        ty_vars,
         data_constructors,
     } = data_decl;
 
@@ -258,6 +268,10 @@ fn data_decl_to_symbol(
 
     let ty_constructor = Rc::new(RefCell::new(TypeConstructor {
         name: ty_constructor.clone(),
+        type_vars: ty_vars
+            .iter()
+            .map(|ty_var| (ty_var.clone(), ty_constructor.clone()))
+            .collect(),
         data_constructors: vec![],
     }));
 
@@ -286,8 +300,40 @@ fn data_decl_to_symbol(
             })
             .collect::<Result<Vec<Type>, String>>()?;
 
-        // TODO: add support for type constructors with fields
-        let custom_ty = Type::CustomType(ty_constructor.as_ref().borrow().name.clone(), vec![]);
+        // check that all type variables in the fields are in the type constructor
+        for ty in fields.iter_mut() {
+            if let Type::TypeVar {
+                var_name,
+                ctx_symbol_name,
+            } = ty
+            {
+                if ty_constructor
+                    .as_ref()
+                    .borrow()
+                    .type_vars
+                    .iter()
+                    .any(|(ty_var, _)| ty_var == var_name)
+                {
+                    ctx_symbol_name.clone_from(&constructor.name);
+                } else {
+                    return Err(format!(
+                            "Type variable {} used in data constructor {} not found in type constructor {}",
+                            var_name, constructor.name, ty_constructor.as_ref().borrow().name
+                        ));
+                }
+            }
+        }
+
+        let custom_ty = Type::CustomType(
+            ty_constructor.as_ref().borrow().name.clone(),
+            ty_vars
+                .iter()
+                .map(|ty_var| Type::TypeVar {
+                    var_name: ty_var.clone(),
+                    ctx_symbol_name: constructor.name.clone(),
+                })
+                .collect(),
+        );
         // add constructor return type
         let ty = if fields.is_empty() {
             custom_ty
@@ -370,11 +416,6 @@ fn parser_type_to_type(
     parser_type: &ast_gen::Type,
     name: &str,
 ) -> Result<Type, String> {
-    // TODO: add support for type applications
-    if parser_type.0.len() > 1 {
-        return Err("Type applications not supported yet".to_string());
-    }
-
     let first_ty = parser_type.0.first().ok_or("Empty type not allowed")?;
     let ty = match first_ty {
         ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
@@ -383,10 +424,14 @@ fn parser_type_to_type(
             // TODO: add support for type aliases
             //"String" => Type::List(Box::new(Type::Char)),
             _ => {
-                if let Some(data_decl) = type_constructor_table.get(ty_con) {
-                    // TODO: add support for type constructors with fields
-                    // requiers_more_tys = true;
-                    Type::CustomType(data_decl.as_ref().borrow().name.clone(), vec![])
+                if let Some(data_decl) = type_constructor_table.get(ty_con).cloned() {
+                    let mut ty_vars = vec![];
+                    for ty in parser_type.0.iter().skip(1) {
+                        let ty = ast_gen::Type(vec![ty.clone()]);
+                        ty_vars.push(parser_type_to_type(type_constructor_table, &ty, name)?);
+                    }
+
+                    Type::CustomType(data_decl.as_ref().borrow().name.clone(), ty_vars)
                 } else {
                     return Err(format!("Type constructor {} not found", ty_con));
                 }
