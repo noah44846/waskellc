@@ -6,9 +6,5 @@ sq_print x = print (square x);
 
 foreign import wasm print :: Int -> ();
 
--- Example of partial application on the imported function
-const :: a -> b -> a;
-const x _ = x;
-
 main :: ();
 main = const (sq_print 3) (sq_print 4);

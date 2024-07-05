@@ -2,7 +2,7 @@ foreign export wasm add3 :: Int -> Int -> Int -> Int;
 add3 x y z = x + y + z;
 
 foreign export wasm avg3 :: Int -> Int -> Int -> Int;
-avg3 x y z = (x + y + z) / 3;
+avg3 x y z = (x + y + z) `div` 3;
 
 foreign export wasm sub3 :: Int -> Int -> Int -> Int;
 sub3 x y z = (x - y) - z;
@@ -12,4 +12,4 @@ sub3' x y z = x + (-y) + (-z);
 
 main :: Int;
 -- (12 + 1 + 7) + 2 + -4 + -4 = 14
-main = (add3 (3 * 4) (add3 1 2 (-4 / 2)) (10 - 3)) + (avg3 1 2 3) + (sub3 1 2 3) + (sub3' 1 2 3);
+main = (add3 (3 * 4) (add3 1 2 (-4 `div` 2)) (10 - 3)) + (avg3 1 2 3) + (sub3 1 2 3) + (sub3' 1 2 3);

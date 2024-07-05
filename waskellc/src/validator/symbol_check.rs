@@ -17,20 +17,12 @@ pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
 type TypeConstructorTable = HashMap<String, Rc<RefCell<TypeConstructor>>>;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum IsForeign {
-    LibImported,
-    ForeignImported,
-    Exported,
-    NotForeign,
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub struct Symbol {
     pub name: String,
     pub ty: Type,
     pub expr: Option<Expression>,
     pub data_constructor_idx: Option<usize>,
-    pub is_foreign: IsForeign,
+    pub is_foreign: ast_gen::IsForeign,
 }
 
 #[derive(PartialEq, Clone)]
@@ -107,18 +99,25 @@ impl Symbol {
     pub fn is_imported(&self) -> bool {
         matches!(
             self.is_foreign,
-            IsForeign::LibImported | IsForeign::ForeignImported
+            ast_gen::IsForeign::LibImported | ast_gen::IsForeign::ForeignImported
         )
     }
 
     pub fn is_exported(&self) -> bool {
-        matches!(self.is_foreign, IsForeign::Exported)
+        matches!(
+            self.is_foreign,
+            ast_gen::IsForeign::Exported | ast_gen::IsForeign::UnevaluatedExported
+        )
+    }
+
+    pub fn is_unevaluated_export(&self) -> bool {
+        matches!(self.is_foreign, ast_gen::IsForeign::UnevaluatedExported)
     }
 
     pub fn import_module_name(&self) -> Option<&'static str> {
         match self.is_foreign {
-            IsForeign::ForeignImported => Some("foreign"),
-            IsForeign::LibImported => Some("lib"),
+            ast_gen::IsForeign::ForeignImported => Some("foreign"),
+            ast_gen::IsForeign::LibImported => Some("lib"),
             _ => None,
         }
     }
@@ -147,7 +146,10 @@ pub enum Expression {
     UnitValue,
     Symbol(Rc<RefCell<Symbol>>),
     ScopeSymbol(String),
-    FunctionApplication(Vec<Expression>),
+    FunctionApplication {
+        params: Vec<Expression>,
+        is_partial: bool,
+    },
     Tuple(Vec<Expression>),
     LambdaAbstraction(Vec<String>, Box<Expression>),
     CaseExpression(CaseExpression),
@@ -226,11 +228,19 @@ impl fmt::Debug for Expression {
             Expression::ScopeSymbol(name) => write!(f, "FunctionParameter({})", name),
             Expression::Tuple(exprs) if f.alternate() => write!(f, "Tuple({:#?})", exprs),
             Expression::Tuple(exprs) => write!(f, "Tuple({:?})", exprs),
-            Expression::FunctionApplication(exprs) if f.alternate() => {
-                write!(f, "FunctionApplication({:#?})", exprs)
+            Expression::FunctionApplication { params, is_partial } if f.alternate() => {
+                write!(
+                    f,
+                    "FunctionApplication({:#?}, is_partial: {})",
+                    params, is_partial
+                )
             }
-            Expression::FunctionApplication(exprs) => {
-                write!(f, "FunctionApplication({:?})", exprs)
+            Expression::FunctionApplication { params, is_partial } => {
+                write!(
+                    f,
+                    "FunctionApplication({:?}, is_partial: {})",
+                    params, is_partial
+                )
             }
             Expression::LambdaAbstraction(params, expr) if f.alternate() => {
                 write!(f, "LambdaAbstraction({:#?}, {:#?})", params, expr)
@@ -347,7 +357,7 @@ fn data_decl_to_symbol(
             ty,
             expr: None,
             data_constructor_idx: Some(i),
-            is_foreign: IsForeign::NotForeign,
+            is_foreign: ast_gen::IsForeign::NotForeign,
         }));
         ty_constructor
             .as_ref()
@@ -363,8 +373,7 @@ fn data_decl_to_symbol(
 fn function_type_to_symbol(
     name: String,
     func_ty: &ast_gen::FunctionType,
-    is_exported: bool,
-    is_imported: bool,
+    is_foreign: ast_gen::IsForeign,
     symbol_table: &mut SymbolTable,
     type_constructor_table: &mut TypeConstructorTable,
 ) -> Result<(), String> {
@@ -381,13 +390,7 @@ fn function_type_to_symbol(
             ty,
             expr: None,
             data_constructor_idx: None,
-            is_foreign: if is_imported {
-                IsForeign::ForeignImported
-            } else if is_exported {
-                IsForeign::Exported
-            } else {
-                IsForeign::NotForeign
-            },
+            is_foreign,
         })),
     );
     Ok(())
@@ -421,8 +424,13 @@ fn parser_type_to_type(
         ast_gen::TypeApplicationElement::TypeConstructor(ty_con) => match ty_con.as_str() {
             "Int" => Type::Int,
             "Char" => Type::Char,
-            // TODO: add support for type aliases
-            //"String" => Type::List(Box::new(Type::Char)),
+            "String" => {
+                if let Some(data_decl) = type_constructor_table.get("List").cloned() {
+                    Type::CustomType(data_decl.as_ref().borrow().name.clone(), vec![Type::Char])
+                } else {
+                    return Err("List type constructor not found".to_string());
+                }
+            }
             _ => {
                 if let Some(data_decl) = type_constructor_table.get(ty_con).cloned() {
                     let mut ty_vars = vec![];
@@ -711,21 +719,20 @@ fn parser_expr_to_expr(
             let op = symbol_table
                 .get(&op.to_string())
                 .ok_or(format!("Operator {} not found", op))?;
-            Ok(Expression::FunctionApplication(vec![
-                Expression::Symbol(op.clone()),
-                lhs_expr,
-                rhs_expr,
-            ]))
+            Ok(Expression::FunctionApplication {
+                params: vec![Expression::Symbol(op.clone()), lhs_expr, rhs_expr],
+                is_partial: op.as_ref().borrow().arity() != 2,
+            })
         }
         ast_gen::Expression::NegatedExpr(expr) => {
             let expr = parser_expr_to_expr(expr, scope, symbol_table)?;
             let negate = symbol_table
                 .get("negate")
                 .ok_or("negate function not found")?;
-            Ok(Expression::FunctionApplication(vec![
-                Expression::Symbol(negate.clone()),
-                expr,
-            ]))
+            Ok(Expression::FunctionApplication {
+                params: vec![Expression::Symbol(negate.clone()), expr],
+                is_partial: false,
+            })
         }
         ast_gen::Expression::LeftHandSideExpression(lhs) => {
             parser_lhs_expr_to_expr(lhs, scope, symbol_table)
@@ -756,7 +763,10 @@ fn parser_lhs_expr_to_expr(
                 exprs.push(expr);
             }
 
-            Ok(Expression::FunctionApplication(exprs))
+            Ok(Expression::FunctionApplication {
+                params: exprs,
+                is_partial: false, // temporary value -> gets changed in type checking
+            })
         }
     }
 }
@@ -841,7 +851,7 @@ fn parser_fn_param_expr_to_expr(
                     ty,
                     expr: Some(expr),
                     data_constructor_idx: None,
-                    is_foreign: IsForeign::Exported,
+                    is_foreign: ast_gen::IsForeign::NotForeign,
                 }));
                 entry.insert(symbol);
             }
@@ -859,49 +869,6 @@ pub fn validate(
 ) -> Result<SymbolTable, String> {
     let mut symbol_table: SymbolTable = HashMap::new();
     let mut type_constructor_table: TypeConstructorTable = HashMap::new();
-
-    // TODO: replace this with a std lib
-    let global_op_symbols = [
-        Symbol {
-            name: "+".to_owned(),
-            ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
-            expr: None,
-            data_constructor_idx: None,
-            is_foreign: IsForeign::LibImported,
-        },
-        Symbol {
-            name: "-".to_owned(),
-            ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
-            expr: None,
-            data_constructor_idx: None,
-            is_foreign: IsForeign::LibImported,
-        },
-        Symbol {
-            name: "*".to_owned(),
-            ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
-            expr: None,
-            data_constructor_idx: None,
-            is_foreign: IsForeign::LibImported,
-        },
-        Symbol {
-            name: "/".to_owned(),
-            ty: Type::Function(vec![Type::Int, Type::Int, Type::Int]),
-            expr: None,
-            data_constructor_idx: None,
-            is_foreign: IsForeign::LibImported,
-        },
-        Symbol {
-            name: "negate".to_owned(),
-            ty: Type::Function(vec![Type::Int, Type::Int]),
-            expr: None,
-            data_constructor_idx: None,
-            is_foreign: IsForeign::LibImported,
-        },
-    ];
-
-    for symbol in global_op_symbols.iter() {
-        symbol_table.insert(symbol.name.clone(), Rc::new(RefCell::new(symbol.clone())));
-    }
 
     // add data declarations to symbol table
     for decl in ast
@@ -925,17 +892,19 @@ pub fn validate(
         if let ast_gen::TopDeclaration::TypeSig {
             name,
             ty,
-            is_exported,
-            is_imported,
+            is_foreign,
             ..
         } = decl
         {
-            let is_exported = if name == "main" { true } else { *is_exported };
+            let is_foreign = if name == "main" {
+                ast_gen::IsForeign::Exported
+            } else {
+                is_foreign.clone()
+            };
             function_type_to_symbol(
                 name.clone(),
                 ty,
-                is_exported,
-                *is_imported,
+                is_foreign,
                 &mut symbol_table,
                 &mut type_constructor_table,
             )?;

@@ -178,76 +178,6 @@ impl TypeVarAssignments {
             _ => *ty1 == *ty2,
         }
     }
-
-    fn check(&self, ty1: &Type, ty2: &Type) -> bool {
-        match (ty1, ty2) {
-            (Type::TypeVar { .. }, Type::TypeVar { .. }) => {
-                if *ty1 == *ty2 {
-                    return true;
-                }
-
-                let inner_ty1 = self.get(ty1);
-                let inner_ty2 = self.get(ty2);
-
-                if inner_ty1.is_none() || inner_ty2.is_none() {
-                    return false;
-                }
-
-                let inner_ty1 = inner_ty1.unwrap();
-                let inner_ty2 = inner_ty2.unwrap();
-
-                if inner_ty1.concrete_ty.is_none() && inner_ty2.concrete_ty.is_none() {
-                    return inner_ty1.ty.find() == inner_ty2.ty.find();
-                }
-
-                inner_ty1.concrete_ty == inner_ty2.concrete_ty
-            }
-            (Type::TypeVar { .. }, _) => {
-                let inner_ty1 = self.get(ty1);
-
-                if inner_ty1.is_none() {
-                    return false;
-                }
-
-                let inner_ty1 = inner_ty1.unwrap();
-
-                if let Some(concrete_ty) = &inner_ty1.concrete_ty {
-                    self.check(concrete_ty, ty2)
-                } else {
-                    true
-                }
-            }
-            (_, Type::TypeVar { .. }) => self.check(ty2, ty1),
-            (Type::Function(tys1), Type::Function(tys2)) => {
-                if tys1.len() != tys2.len() {
-                    return false;
-                }
-
-                tys1.iter()
-                    .zip(tys2.iter())
-                    .all(|(ty1, ty2)| self.check(ty1, ty2))
-            }
-            (Type::Tuple(tys1), Type::Tuple(tys2)) => {
-                if tys1.len() != tys2.len() {
-                    return false;
-                }
-
-                tys1.iter()
-                    .zip(tys2.iter())
-                    .all(|(ty1, ty2)| self.check(ty1, ty2))
-            }
-            (Type::CustomType(name1, tys1), Type::CustomType(name2, tys2)) => {
-                if name1 != name2 {
-                    return false;
-                }
-
-                tys1.iter()
-                    .zip(tys2.iter())
-                    .all(|(ty1, ty2)| self.check(ty1, ty2))
-            }
-            _ => *ty1 == *ty2,
-        }
-    }
 }
 
 pub fn type_check_syms(symbol_table: SymbolTable) -> Result<SymbolTable, String> {
@@ -291,7 +221,7 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
     let mut ty_var_assigns = TypeVarAssignments::new();
 
     let res = match expr {
-        Expression::FunctionApplication(exprs) => {
+        Expression::FunctionApplication { params: exprs, .. } => {
             if let Type::Function(tys) = parent_ty {
                 assert!(tys.len() > 1, "Parent type has to be flattened");
 
@@ -333,16 +263,19 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
                     scope.push((params[i].clone(), ty.clone()));
 
                     match expr.as_mut() {
-                        Expression::FunctionApplication(ref mut exprs) => {
+                        Expression::FunctionApplication { params: exprs, .. } => {
                             exprs.push(Expression::ScopeSymbol(params[i].clone()));
                         }
                         Expression::Symbol(_)
                         | Expression::ScopeSymbol(_)
                         | Expression::LambdaAbstraction(_, _) => {
-                            **expr = Expression::FunctionApplication(vec![
-                                *expr.clone(),
-                                Expression::ScopeSymbol(params[i].clone()),
-                            ]);
+                            **expr = Expression::FunctionApplication {
+                                params: vec![
+                                    *expr.clone(),
+                                    Expression::ScopeSymbol(params[i].clone()),
+                                ],
+                                is_partial: false, // temporary value -> will be updated in type_check_expr
+                            };
                         }
                         Expression::IntLiteral(_)
                         | Expression::StringLiteral(_)
@@ -411,8 +344,7 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
         _ => type_check_expr(expr, &mut scope, &mut ty_var_assigns),
     }?;
 
-    // TODO: maybe assign_or_check should be used here
-    if ty_var_assigns.check(parent_ty, &res.clone()) {
+    if ty_var_assigns.assign_or_check(parent_ty, &res.clone()) {
         Ok(())
     } else {
         Err(format!(
@@ -430,7 +362,7 @@ fn type_check_expr(
     let res: Result<Type, String> = match expr {
         Expression::IntLiteral(_) => Ok(Type::Int),
         Expression::CharLiteral(_) => Ok(Type::Char),
-        Expression::StringLiteral(_) => todo!(),
+        Expression::StringLiteral(_) => Ok(Type::CustomType("List".to_string(), vec![Type::Char])),
         Expression::UnitValue => Ok(Type::Unit),
         Expression::Symbol(symbol) => Ok(symbol.as_ref().borrow().ty.clone()),
         Expression::ScopeSymbol(name) => {
@@ -441,13 +373,20 @@ fn type_check_expr(
                 .ok_or(format!("Parameter {} not found in scope", name))?;
             Ok(ty)
         }
-        Expression::FunctionApplication(exprs) => {
+        Expression::FunctionApplication {
+            params: exprs,
+            ref mut is_partial,
+        } => {
             if exprs.len() < 2 {
                 return Err("Function application must have at least two parameter".to_string());
             }
 
             fn flatten_func_app(exprs: &mut Vec<Expression>) {
-                if let Expression::FunctionApplication(inner_exprs) = exprs.first_mut().unwrap() {
+                if let Expression::FunctionApplication {
+                    params: inner_exprs,
+                    ..
+                } = exprs.first_mut().unwrap()
+                {
                     let mut new_exprs = vec![];
                     new_exprs.extend(inner_exprs.iter().cloned());
                     new_exprs.extend(exprs[1..].to_vec());
@@ -467,6 +406,8 @@ fn type_check_expr(
             } else {
                 return Err(format!("Can't apply a value of type {:?}", func_ty));
             };
+
+            *is_partial = func_tys.len() > exprs.len();
 
             let mut param_tys = vec![];
             for expr in exprs.iter_mut().skip(1) {
@@ -528,7 +469,6 @@ fn type_check_expr(
                     }
                     CaseBranchPattern::Wildcard => Ok(()),
                     CaseBranchPattern::IntLiteral(_) => {
-                        // TODO: make sure the input type never a type var
                         if !type_var_assigns.assign_or_check(input_ty, &Type::Int) {
                             return Err(format!(
                                 "Int pattern {:?} and input has type {:?} with assignments {:#?}",
@@ -542,7 +482,6 @@ fn type_check_expr(
                         fields,
                     } => {
                         let symbol = data_constructor.as_ref().borrow();
-                        // TODO: type constructors not handled
                         let ret_ty = symbol.return_type().unwrap().clone();
                         if !type_var_assigns.assign_or_check(input_ty, &ret_ty) {
                             return Err(format!(
@@ -569,34 +508,51 @@ fn type_check_expr(
                         Ok(())
                     }
                     CaseBranchPattern::Tuple(patterns) => {
-                        if let Type::Tuple(tys) = input_ty {
-                            if patterns.len() != tys.len() {
-                                return Err(format!(
-                                    "Tuple pattern has {} elements but input has {}",
-                                    patterns.len(),
-                                    tys.len()
-                                ));
-                            }
-
-                            for (pattern, ty) in patterns.iter().zip(tys.iter()) {
-                                extend_scope_for_pattern(pattern, scope, ty, type_var_assigns)?;
-                            }
-                            Ok(())
+                        let ty = if let Type::TypeVar { .. } = input_ty {
+                            type_var_assigns
+                                .get(input_ty)
+                                .map(|inner_ty| {
+                                    inner_ty.concrete_ty.as_ref().ok_or(format!(
+                                        "Type var {:?} has no concrete type",
+                                        input_ty
+                                    ))
+                                })
+                                .ok_or(format!(
+                                    "Type var {:?} not found in assignments",
+                                    input_ty
+                                ))??
                         } else {
-                            Err(format!(
-                                "Tuple pattern has type {:?} but input has type {:?}",
-                                patterns, input_ty
-                            ))
+                            input_ty
+                        };
+
+                        let tys = if let Type::Tuple(tys) = ty {
+                            tys.to_vec()
+                        } else {
+                            return Err(format!(
+                                "Tuple pattern has type {:?} but input has type {:?}, with assignments {:#?}",
+                                patterns, input_ty, type_var_assigns
+                            ));
+                        };
+
+                        if patterns.len() != tys.len() {
+                            return Err(format!(
+                                "Tuple pattern has {} elements but input has {}",
+                                patterns.len(),
+                                tys.len(),
+                            ));
                         }
+
+                        for (pattern, ty) in patterns.iter().zip(tys.iter()) {
+                            extend_scope_for_pattern(pattern, scope, ty, type_var_assigns)?;
+                        }
+                        Ok(())
                     }
                 }
             }
 
             let expr_ty = type_check_expr(input_expr, scope, type_var_assigns)?;
 
-            // TODO: check if this is ok
-            // TODO: maybe assign_or_check should be used here
-            if !type_var_assigns.check(input_ty, &expr_ty) {
+            if !type_var_assigns.assign_or_check(input_ty, &expr_ty) {
                 return Err(format!(
                     "Input expression has type {:#?} but expected {:#?}",
                     expr_ty, input_ty
@@ -617,9 +573,7 @@ fn type_check_expr(
 
             if branch_tys
                 .iter()
-                // TODO: check if this is ok
-                // TODO: maybe assign_or_check should be used here
-                .all(|ty| type_var_assigns.check(&branch_tys[0], ty))
+                .all(|ty| type_var_assigns.assign_or_check(&branch_tys[0], ty))
             {
                 Ok(branch_tys[0].clone())
             } else {
@@ -632,7 +586,6 @@ fn type_check_expr(
     flatten_function_ty(&res?)
 }
 
-// TODO: easy to test
 pub fn flatten_function_ty(ty: &Type) -> Result<Type, String> {
     match ty {
         Type::Function(tys) => {

@@ -64,10 +64,6 @@ impl CodeGen {
             .function_types
             .function_type_idx(vec![ValType::I32], Some(ValType::I32))
             .unwrap();
-        let arg_2_int32_no_ret = self
-            .function_types
-            .function_type_idx(vec![ValType::I32; 2], None)
-            .unwrap();
         let arg_2_int32_ret_int32 = self
             .function_types
             .function_type_idx(vec![ValType::I32; 2], Some(ValType::I32))
@@ -107,7 +103,7 @@ impl CodeGen {
             .import_func("lib", ":make_pap", arg_4_int32_ret_int32)
             .unwrap();
         imports
-            .import_func("lib", ":add_to_pap", arg_2_int32_no_ret)
+            .import_func("lib", ":add_to_pap", arg_2_int32_ret_int32)
             .unwrap();
         imports
             .import_func("lib", ":make_thunk_from_pap", arg_2_int32_ret_int32)
@@ -238,14 +234,18 @@ impl CodeGen {
                 symbol.name
             ))?;
 
-        // TODO: consider more elegant way to handle the order in which the functions are added (function section and code section have to be in the same order)
         if symbol.is_exported() {
-            let func_type = self.func_ty_idx_from_symbol(symbol, true)?;
-            let exported_func_name = format!(":exported_{}", symbol.name);
-            self.functions
-                .as_mut()
-                .unwrap()
-                .add_function(&exported_func_name, func_type);
+            let exported_func_name = if symbol.is_unevaluated_export() {
+                symbol.name.clone()
+            } else {
+                let name = format!(":exported_{}", symbol.name);
+                let func_type = self.func_ty_idx_from_symbol(symbol, true)?;
+                self.functions
+                    .as_mut()
+                    .unwrap()
+                    .add_function(&name, func_type);
+                name
+            };
             self.functions
                 .as_mut()
                 .unwrap()
@@ -334,7 +334,7 @@ impl CodeGen {
             symbol.name
         ))?;
 
-        self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs, &symbol.ty)?;
+        self.generate_instructions_from_top_level_expr(expr, &mut locals, &mut instrs)?;
 
         fn add_function_to_code_section(
             code_section: &mut CodeSection,
@@ -351,7 +351,7 @@ impl CodeGen {
 
         add_function_to_code_section(&mut self.code_section, &locals, &instrs);
 
-        if symbol.is_exported() {
+        if symbol.is_exported() && !symbol.is_unevaluated_export() {
             let mut instrs = vec![];
             self.generate_instructions_from_exported(symbol, &mut instrs)?;
             add_function_to_code_section(
@@ -393,10 +393,11 @@ impl CodeGen {
         match &sym.ty {
             validator::Type::Function(params) => {
                 for (i, param) in params.iter().take(params.len() - 1).enumerate() {
-                    // TODO: doesn't work
                     instrs.push(Instruction::I32Const(
-                        // TODO: change to one if it isn't a int
-                        if matches!(param, validator::Type::Int) {
+                        if matches!(param, validator::Type::TypeVar { .. }) {
+                            println!("{}", sym.name);
+                            todo!("TypeVar not implemented as a parameter for exported functions")
+                        } else if matches!(param, validator::Type::Int) {
                             0
                         } else {
                             1
@@ -491,20 +492,13 @@ impl CodeGen {
         expr: &validator::Expression,
         locals: &mut WasmFunctionLocals,
         instrs: &mut Vec<Instruction>,
-        parent_ty: &validator::Type,
     ) -> Result<(), String> {
         match expr {
             validator::Expression::LambdaAbstraction(syms, body) => {
-                let tys = if let validator::Type::Function(tys) = parent_ty {
-                    tys
-                } else {
-                    unreachable!();
-                };
                 let typed_params = syms
                     .iter()
                     .enumerate()
-                    .zip(tys.iter())
-                    .map(|((i, s), ty)| (i as u32, s.as_str(), ty.clone()))
+                    .map(|(i, s)| (i as u32, s.as_str()))
                     .collect::<Vec<_>>();
                 let local_idx =
                     self.generate_instructions_for_expr(&typed_params, body, locals, instrs)?;
@@ -512,7 +506,7 @@ impl CodeGen {
                 instrs.push(Instruction::LocalGet(local_idx));
                 instrs.push(Instruction::End);
             }
-            validator::Expression::FunctionApplication(_) => {
+            validator::Expression::FunctionApplication { .. } => {
                 let local_idx = self.generate_instructions_for_expr(&[], expr, locals, instrs)?;
                 instrs.push(Instruction::LocalGet(local_idx));
                 instrs.push(Instruction::End);
@@ -550,8 +544,50 @@ impl CodeGen {
                 instrs.push(Instruction::Call(make_val_idx));
                 instrs.push(Instruction::End);
             }
-            validator::Expression::CharLiteral(_) => todo!(),
-            validator::Expression::StringLiteral(_) => todo!(),
+            validator::Expression::CharLiteral(val) => {
+                let make_val_idx = self
+                    .functions
+                    .as_mut()
+                    .unwrap()
+                    .function_index(":make_val")
+                    .ok_or("Function make_val not found in the function table")?;
+
+                instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::I32Const(*val as i32));
+                instrs.push(Instruction::Call(make_val_idx));
+                instrs.push(Instruction::End);
+            }
+            validator::Expression::StringLiteral(val) => {
+                let functions = self.functions.as_mut().unwrap();
+                let cons_idx = functions
+                    .function_index("Cons")
+                    .ok_or("Function Cons not found in the function table")?;
+
+                let nil_idx = functions
+                    .function_index("Nil")
+                    .ok_or("Function Nil not found in the function table")?;
+
+                let make_val_idx = functions
+                    .function_index(":make_val")
+                    .ok_or("Function make_val not found in the function table")?;
+
+                let local_idx = locals.add_local(ValType::I32);
+
+                instrs.push(Instruction::Call(nil_idx));
+                instrs.push(Instruction::LocalSet(local_idx));
+
+                for c in val.chars().rev() {
+                    instrs.push(Instruction::I32Const(0));
+                    instrs.push(Instruction::I32Const(c as i32));
+                    instrs.push(Instruction::Call(make_val_idx));
+                    instrs.push(Instruction::LocalGet(local_idx));
+                    instrs.push(Instruction::Call(cons_idx));
+                    instrs.push(Instruction::LocalSet(local_idx));
+                }
+
+                instrs.push(Instruction::LocalGet(local_idx));
+                instrs.push(Instruction::End);
+            }
             _ => todo!("Expression not supported or not implemented"),
         }
         Ok(())
@@ -559,7 +595,7 @@ impl CodeGen {
 
     fn generate_instructions_for_expr(
         &mut self,
-        context: &[(u32, &str, validator::Type)],
+        context: &[(u32, &str)],
         expr: &validator::Expression,
         locals: &mut WasmFunctionLocals,
         instrs: &mut Vec<Instruction>,
@@ -568,7 +604,7 @@ impl CodeGen {
         let functions = self.functions.as_mut().unwrap();
 
         match expr {
-            validator::Expression::FunctionApplication(params) => match &params[0] {
+            validator::Expression::FunctionApplication { params, is_partial } => match &params[0] {
                 validator::Expression::Symbol(sym) => self.make_thunk_from_symbol(
                     instrs,
                     locals,
@@ -583,13 +619,13 @@ impl CodeGen {
                     local_idx,
                     context,
                     name,
-                    &params[1..],
+                    (&params[1..], *is_partial),
                 ),
                 validator::Expression::LambdaAbstraction(_params, _body) => unimplemented!(),
                 s => unreachable!("Function application not supported: {:?}", s),
             },
             validator::Expression::ScopeSymbol(name) => {
-                let (sym_idx, _, _) = context.iter().find(|(_, s, _)| s == name).ok_or(format!(
+                let (sym_idx, _) = context.iter().find(|(_, s)| s == name).ok_or(format!(
                     "Symbol {} not accessible in the lambda abstraction",
                     name
                 ))?;
@@ -645,8 +681,44 @@ impl CodeGen {
                 instrs.push(Instruction::LocalSet(local_idx));
                 Ok(local_idx)
             }
-            validator::Expression::CharLiteral(_) => todo!(),
-            validator::Expression::StringLiteral(_) => todo!(),
+            validator::Expression::CharLiteral(val) => {
+                let make_val_idx = functions
+                    .function_index(":make_val")
+                    .ok_or("Function make_val not found in the function table")?;
+
+                instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::I32Const(*val as i32));
+                instrs.push(Instruction::Call(make_val_idx));
+                instrs.push(Instruction::LocalSet(local_idx));
+                Ok(local_idx)
+            }
+            validator::Expression::StringLiteral(val) => {
+                let cons_idx = functions
+                    .function_index("Cons")
+                    .ok_or("Function Cons not found in the function table")?;
+
+                let nil_idx = functions
+                    .function_index("Nil")
+                    .ok_or("Function Nil not found in the function table")?;
+
+                let make_val_idx = functions
+                    .function_index(":make_val")
+                    .ok_or("Function make_val not found in the function table")?;
+
+                instrs.push(Instruction::Call(nil_idx));
+                instrs.push(Instruction::LocalSet(local_idx));
+
+                for c in val.chars().rev() {
+                    instrs.push(Instruction::I32Const(0));
+                    instrs.push(Instruction::I32Const(c as i32));
+                    instrs.push(Instruction::Call(make_val_idx));
+                    instrs.push(Instruction::LocalGet(local_idx));
+                    instrs.push(Instruction::Call(cons_idx));
+                    instrs.push(Instruction::LocalSet(local_idx));
+                }
+
+                Ok(local_idx)
+            }
             validator::Expression::UnitValue => {
                 let make_val_idx = functions
                     .function_index(":make_val")
@@ -660,8 +732,8 @@ impl CodeGen {
             }
             validator::Expression::CaseExpression(validator::CaseExpression {
                 input_expr,
-                input_ty,
                 branches,
+                ..
             }) => {
                 instrs.push(Instruction::Block(BlockType::Empty));
 
@@ -680,7 +752,7 @@ impl CodeGen {
                     let mut scope = context.to_vec();
                     is_input_evaluated = self.generate_instructions_for_case_branch(
                         is_input_evaluated,
-                        (input_local_idx, input_ty.as_ref().clone()),
+                        input_local_idx,
                         &mut scope,
                         pattern,
                         locals,
@@ -756,8 +828,8 @@ impl CodeGen {
     fn generate_instructions_for_case_branch<'a>(
         &mut self,
         mut is_input_evaluated: bool,
-        input: (u32, validator::Type),
-        context: &mut Vec<(u32, &'a str, validator::Type)>,
+        input_local_idx: u32,
+        context: &mut Vec<(u32, &'a str)>,
         pattern: &'a validator::CaseBranchPattern,
         locals: &mut WasmFunctionLocals,
         instrs: &mut Vec<Instruction>,
@@ -769,8 +841,6 @@ impl CodeGen {
             .function_index(":eval")
             .ok_or("Function eval not found in the function table")?;
 
-        let (input_local_idx, input_ty) = input;
-
         match pattern {
             validator::CaseBranchPattern::Wildcard => {}
             validator::CaseBranchPattern::AsPattern(var_name, as_pattern) => {
@@ -779,12 +849,12 @@ impl CodeGen {
                 instrs.push(Instruction::LocalGet(input_local_idx));
                 instrs.push(Instruction::LocalSet(var_local_idx));
 
-                context.push((var_local_idx, var_name, input_ty.clone()));
+                context.push((var_local_idx, var_name));
 
                 if let Some(as_pattern) = as_pattern {
                     is_input_evaluated = self.generate_instructions_for_case_branch(
                         is_input_evaluated,
-                        (input_local_idx, input_ty),
+                        input_local_idx,
                         context,
                         as_pattern,
                         locals,
@@ -857,15 +927,7 @@ impl CodeGen {
 
                     self.generate_instructions_for_case_branch(
                         false,
-                        (
-                            field_local_idx,
-                            data_constructor
-                                .as_ref()
-                                .borrow()
-                                .param_type(i)
-                                .unwrap()
-                                .clone(),
-                        ),
+                        field_local_idx,
                         context,
                         field,
                         locals,
@@ -897,15 +959,9 @@ impl CodeGen {
                     }));
                     instrs.push(Instruction::LocalSet(field_local_idx));
 
-                    let field_ty = if let validator::Type::Tuple(ref tys) = input_ty {
-                        tys.get(i).unwrap().clone()
-                    } else {
-                        unreachable!()
-                    };
-
                     self.generate_instructions_for_case_branch(
                         false,
-                        (field_local_idx, field_ty),
+                        field_local_idx,
                         context,
                         pattern,
                         locals,
@@ -920,7 +976,7 @@ impl CodeGen {
 
     fn make_env_wrapper(
         &mut self,
-        context: &[(u32, &str, validator::Type)],
+        context: &[(u32, &str)],
         locals: &mut WasmFunctionLocals,
         instrs: &mut Vec<Instruction>,
         local_idx: u32,
@@ -970,7 +1026,7 @@ impl CodeGen {
         instrs: &mut Vec<Instruction>,
         locals: &mut WasmFunctionLocals,
         local_idx: u32,
-        context: &[(u32, &str, validator::Type)],
+        context: &[(u32, &str)],
         func: &validator::Symbol,
         params: &[validator::Expression],
     ) -> Result<u32, String> {
@@ -1024,9 +1080,9 @@ impl CodeGen {
         instrs: &mut Vec<Instruction>,
         locals: &mut WasmFunctionLocals,
         local_idx: u32,
-        context: &[(u32, &str, validator::Type)],
+        context: &[(u32, &str)],
         func_name: &str,
-        params: &[validator::Expression],
+        (params, is_partial): (&[validator::Expression], bool),
     ) -> Result<u32, String> {
         let functions = self.functions.as_ref().unwrap();
         let make_thunk_from_pap_idx = functions
@@ -1036,30 +1092,25 @@ impl CodeGen {
             .function_index(":add_to_pap")
             .ok_or("Function add_to_pap not found in the function table")?;
 
-        let (pap_local_idx, _, pap_ty) =
-            context
-                .iter()
-                .find(|(_, s, _)| *s == func_name)
-                .ok_or(format!(
-                    "Function {} not found in the lambda abstraction",
-                    func_name
-                ))?;
+        let (pap_local_idx, _) = context
+            .iter()
+            .find(|(_, s)| **s == *func_name)
+            .ok_or(format!(
+                "Function {} not accessible in the lambda abstraction",
+                func_name
+            ))?;
 
-        let pap_tys = if let validator::Type::Function(tys) = pap_ty {
-            tys
-        } else {
-            unreachable!()
-        };
-
-        if pap_tys.len() - 1 != params.len() {
+        if is_partial {
+            println!("Partial application not implemented for functions passed as parameters");
             for param in params {
                 let rec_local_idx =
                     self.generate_instructions_for_expr(context, param, locals, instrs)?;
                 instrs.push(Instruction::LocalGet(*pap_local_idx));
                 instrs.push(Instruction::LocalGet(rec_local_idx));
                 instrs.push(Instruction::Call(add_to_pap_idx));
-                instrs.push(Instruction::LocalGet(*pap_local_idx));
+                instrs.push(Instruction::LocalSet(*pap_local_idx));
             }
+            instrs.push(Instruction::LocalGet(*pap_local_idx));
         } else {
             self.make_env_wrapper(context, locals, instrs, local_idx, None, params)?;
 

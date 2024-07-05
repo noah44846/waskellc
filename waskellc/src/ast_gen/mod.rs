@@ -7,6 +7,6 @@ mod parser;
 
 pub use parser::{
     parse, DataConstructor, DataDeclaration, Expression, FunctionDeclaration,
-    FunctionParameterExpression, FunctionParameterPattern, FunctionType, LeftHandSideExpression,
-    Pattern, TopDeclaration, TopDeclarations, Type, TypeApplicationElement,
+    FunctionParameterExpression, FunctionParameterPattern, FunctionType, IsForeign,
+    LeftHandSideExpression, Pattern, TopDeclaration, TopDeclarations, Type, TypeApplicationElement,
 };

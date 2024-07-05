@@ -843,6 +843,8 @@ The standard library of the functional language is a subset of the Haskell stand
 // - The representing of PAPs at the top level for code generation
 // - Implementation of the parametric polymorphism and specifically assigning a function type to a type variable
 // - RCs and having mutliple mutalble references to the symbol while doing recursion -> consume symbol table clone the symbol and reinsert the modified symbol
+// - Exports and type variables and recursive types (temporary fix -> "unevaluated" tag on export) would need to remove difference between literal and complex datastructure and make make_val recursive
+// - Over applied functions don't work in the type checker because the function type is internally uncurried
 
 = Evaluation
 

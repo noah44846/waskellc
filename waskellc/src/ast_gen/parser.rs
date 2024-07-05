@@ -46,6 +46,15 @@ impl TopDeclarations {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum IsForeign {
+    LibImported,
+    ForeignImported,
+    Exported,
+    UnevaluatedExported,
+    NotForeign,
+}
+
 #[derive(Debug)]
 pub enum TopDeclaration {
     //TypeDecl(TypeDeclaration),
@@ -55,8 +64,7 @@ pub enum TopDeclaration {
     TypeSig {
         name: String,
         ty: FunctionType,
-        is_exported: bool,
-        is_imported: bool,
+        is_foreign: IsForeign,
     },
     FunctionDecl(FunctionDeclaration),
 }
@@ -91,7 +99,6 @@ impl TopDeclaration {
                         return error;
                     };
 
-                    let next = next_token(input, false)?;
                     if ident != "import" && ident != "export" {
                         return Err(format!(
                             "Expected import or export after foreign but got: {}",
@@ -99,6 +106,7 @@ impl TopDeclaration {
                         ));
                     }
 
+                    let next = next_token(input, false)?;
                     if let Token::VariableIdent(call_conv) = next {
                         if call_conv != "wasm" {
                             return Err(format!(
@@ -107,15 +115,39 @@ impl TopDeclaration {
                             ));
                         }
 
+                        let mut is_lib_import = false;
+                        let mut is_unevaluated_export = false;
+
+                        if let Token::String(str) = next_token(input, true)? {
+                            input.next(); // consume the string
+                            if ident == "import" && str == "lib" {
+                                is_lib_import = true;
+                            } else if ident == "export" && str == "unevaluated" {
+                                is_unevaluated_export = true;
+                            } else {
+                                return Err(format!(
+                                    "Unsupported annotation after foreign import/export call convention: {}",
+                                    str
+                                ));
+                            }
+                        }
+
                         let mut ty_sig = TopDeclaration::parse_type_sig_or_decl(input, true)?;
                         if let TopDeclaration::TypeSig {
-                            ref mut is_exported,
-                            ref mut is_imported,
-                            ..
+                            ref mut is_foreign, ..
                         } = ty_sig
                         {
-                            *is_exported = ident == "export";
-                            *is_imported = ident == "import";
+                            *is_foreign = if ident == "import" {
+                                if is_lib_import {
+                                    IsForeign::LibImported
+                                } else {
+                                    IsForeign::ForeignImported
+                                }
+                            } else if is_unevaluated_export {
+                                IsForeign::UnevaluatedExported
+                            } else {
+                                IsForeign::Exported
+                            };
                             return Ok(ty_sig);
                         }
                         unreachable!()
@@ -164,8 +196,7 @@ impl TopDeclaration {
                 Ok(TopDeclaration::TypeSig {
                     name: func_name,
                     ty: FunctionType::parse(input)?,
-                    is_exported: false,
-                    is_imported: false,
+                    is_foreign: IsForeign::NotForeign,
                 })
             }
             _ if !from_foreign => Ok(TopDeclaration::FunctionDecl(FunctionDeclaration::parse(
@@ -491,7 +522,6 @@ impl FunctionParameterPattern {
                     _ => Ok(AsPattern(ident, None)),
                 }
             }
-            // TODO: could be empty list or empty tuple
             Token::ConstructorIdent(ident) => Ok(ConstructorPattern(ident)),
             Token::Special('(') => {
                 match next_token(input, true)? {

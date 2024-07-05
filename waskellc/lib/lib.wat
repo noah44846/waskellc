@@ -2,6 +2,7 @@
   (import "alloc" "memory" (memory 1))
   (import "alloc" "alloc" (func $alloc (param i32) (result i32)))
   (import "alloc" "dealloc" (func $dealloc (param i32 i32)))
+  (;(import "alloc" "print" (func $print (param i32)));)
   (type $ap0 (func (result i32)))
   (type $ap1 (func (param i32) (result i32)))
   (type $ap2 (func (param i32 i32) (result i32)))
@@ -49,9 +50,11 @@
     (local.get $a)
   )
 
-  (func $add_to_pap (export ":add_to_pap") (param $pap i32) (param $val i32)
+  (func $add_to_pap (export ":add_to_pap") (param $pap i32) (param $val i32) (result i32)
     (local $n_left i32)
     (local $pap_env_cursor i32)
+
+    (local.set $pap (call $clone_pap (local.get $pap)))
 
     (if (i32.eq (i32.load offset=4 (local.get $pap)) (i32.const 0)) ;; trap if n_left is 0
       (then
@@ -70,6 +73,8 @@
       (i32.add
         (i32.load offset=8 (local.get $pap)) ;; offset
         (i32.const 4)))
+
+    (local.get $pap)
   )
 
   (func $make_thunk_from_pap (export ":make_thunk_from_pap") (param $pap i32) (param $env i32) (result i32)
@@ -77,6 +82,9 @@
     (local $n_left i32)
     (local $env_cursor i32)
     (local $pap_env_cursor i32)
+
+    (local.set $pap (call $clone_pap (local.get $pap)))
+
     (local.set $thunk (call $make_thunk
       (i32.load (local.get $pap))               ;; function type index
       (i32.load offset=12 (local.get $pap))))   ;; env pointer
@@ -104,6 +112,49 @@
     (unreachable)
   )
 
+  (func $clone_pap (param $pap i32) (result i32)
+    (local $new_pap i32)
+    (local $n_left i32)
+    (local $offset i32)
+    (local $env_len i32)
+    (local $env_cursor i32)
+    (local $new_env i32)
+    (local $new_env_cursor i32)
+
+    (local.set $n_left (i32.load offset=4 (local.get $pap)))
+    (local.set $offset (i32.load offset=8 (local.get $pap)))
+    (local.set $env_len (i32.sub
+        (i32.add
+          (local.get $n_left)
+          (i32.div_s
+            (local.get $offset)
+            (i32.const 4)))
+        (i32.const 1)))
+
+    (local.set $new_pap (call $alloc (i32.const 16)))
+    (i32.store (local.get $new_pap) (i32.load (local.get $pap)))    ;; copy the function type index
+    (i32.store offset=4 (local.get $new_pap) (local.get $n_left))   ;; copy n_left
+    (i32.store offset=8 (local.get $new_pap) (local.get $offset))   ;; copy offset
+    (local.set $new_env (call $make_env (local.get $env_len)))      ;; create a new env
+    (i32.store offset=12 (local.get $new_pap) (local.get $new_env)) ;; set the new env pointer
+
+    (local.set $env_cursor (i32.load offset=12 (local.get $pap)))
+    (local.set $new_env_cursor (local.get $new_env))
+    (loop $loop
+      (if
+        (i32.eq (local.get $env_len) (i32.const 0))
+        (then
+          (return (local.get $new_pap)))
+        (else
+          (i32.store (local.get $new_env_cursor) (i32.load (local.get $env_cursor)))
+          (local.set $env_cursor (i32.add (local.get $env_cursor) (i32.const 4)))
+          (local.set $new_env_cursor (i32.add (local.get $new_env_cursor) (i32.const 4)))
+          (local.set $env_len (i32.sub (local.get $env_len) (i32.const 1)))
+          (br $loop))))
+
+    (unreachable)
+  )
+
   (func $make_val (export ":make_val") (param $type i32) (param $val i32) (result i32)
     (local $a i32)
     (local.set $a (call $alloc (i32.const 5)))
@@ -112,7 +163,19 @@
     (local.get $a)
   )
 
-  (func $add (export "+") (param $x i32) (param $y i32) (result i32)
+  (;(func (export "panic") (param $ptr i32);)
+    (;(unreachable);)
+  (;);)
+
+  (func (export "negate") (param $x i32) (result i32)
+    (return (call $make_val
+      (i32.const 0)
+      (i32.mul
+        (call $full_eval (local.get $x))
+        (i32.const -1))))
+  )
+
+  (func (export "+") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
       (i32.add
@@ -120,7 +183,7 @@
         (call $full_eval (local.get $y)))))
   )
 
-  (func $minus (export "-") (param $x i32) (param $y i32) (result i32)
+  (func (export "-") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
       (i32.sub
@@ -129,7 +192,7 @@
   )
 
 
-  (func $mul (export "*") (param $x i32) (param $y i32) (result i32)
+  (func (export "*") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
       (i32.mul
@@ -137,8 +200,99 @@
         (call $full_eval (local.get $y)))))
   )
 
+  (func (export "==") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (i32.store (local.get $a) (i32.const 0))
+    (i32.store offset=4
+      (local.get $a)
+      (i32.ne
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
 
-  (func $div (export "/") (param $x i32) (param $y i32) (result i32)
+  (func (export "/=") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (i32.store (local.get $a) (i32.const 0))
+    (i32.store offset=4
+      (local.get $a)
+      (i32.eq
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
+
+  (func (export "<") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (i32.store (local.get $a) (i32.const 0))
+    (i32.store offset=4
+      (local.get $a)
+      (i32.gt_s
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
+
+  (func (export ">") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (i32.store (local.get $a) (i32.const 0))
+    (i32.store offset=4
+      (local.get $a)
+      (i32.lt_s
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
+
+  (func (export "<=") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (i32.store (local.get $a) (i32.const 0))
+    (i32.store offset=4
+      (local.get $a)
+      (i32.lt_s
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
+
+  (func (export ">=") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (i32.store (local.get $a) (i32.const 0))
+    (i32.store offset=4
+      (local.get $a)
+      (i32.gt_s
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
+
+  (func (export "compare") (param $x i32) (param $y i32) (result i32)
+    (local $a i32)
+    (local.set $a (call $make_env (i32.const 1)))
+    (local.set $x (call $full_eval (local.get $x)))
+    (local.set $y (call $full_eval (local.get $y)))
+    (i32.store (local.get $a) (i32.const 0))
+    (if
+      (i32.lt_s (local.get $x) (local.get $y))
+      (then
+        (i32.store offset=4 (local.get $a) (i32.const 0)))
+      (else
+        (if
+          (i32.eq (local.get $x) (local.get $y))
+          (then
+            (i32.store offset=4 (local.get $a) (i32.const 1)))
+          (else
+            (i32.store offset=4 (local.get $a) (i32.const 2))))))
+    (return (call $make_val (i32.const 1) (local.get $a)))
+  )
+
+  (func (export "div") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
       (i32.div_s
@@ -146,13 +300,13 @@
         (call $full_eval (local.get $y)))))
   )
 
-
-  (func $negate (export "negate") (param $x i32) (result i32)
+  (func (export "mod") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
-      (i32.sub (i32.const 0) (call $full_eval (local.get $x)))))
+      (i32.rem_s
+        (call $full_eval (local.get $x))
+        (call $full_eval (local.get $y)))))
   )
-
 
   (func $eval (export ":eval") (param $ptr i32) (result i32)
     (loop $loop

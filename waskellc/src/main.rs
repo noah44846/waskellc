@@ -4,7 +4,10 @@ use std::{fs, path::PathBuf, process::Command};
 
 use clap::Parser;
 
-use waskellc::compile;
+use waskellc::{compile, DebugOptions};
+
+const DEFAULT_WASM_LIB_PATH: &str = "lib/lib.wasm";
+const DEFAULT_PRELUDE_PATH: &str = "lib/prelude.wsk";
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -13,6 +16,22 @@ struct Args {
 
     #[arg(short, long, default_value = None)]
     output: Option<PathBuf>,
+
+    #[arg(
+        short = 'l',
+        long,
+        default_value = DEFAULT_WASM_LIB_PATH,
+        help = "Path to wasm lib file"
+    )]
+    wasm_lib_path: PathBuf,
+
+    #[arg(
+        short = 'p',
+        long,
+        default_value = DEFAULT_PRELUDE_PATH,
+        help = "Path to prelude file"
+    )]
+    prelude_path: PathBuf,
 
     #[arg(short = 'd', long)]
     debug: bool,
@@ -61,7 +80,7 @@ fn out_path(in_path: PathBuf) -> PathBuf {
     out_path
 }
 
-fn merge_command(out_path: PathBuf) -> Result<(), String> {
+fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), String> {
     let mut cmd;
 
     if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
@@ -77,7 +96,7 @@ fn merge_command(out_path: PathBuf) -> Result<(), String> {
     }
 
     let out = cmd
-        .arg("wasm-lib/lib.wasm")
+        .arg(&wasm_lib_path)
         .arg("lib")
         .arg(&out_path)
         .arg("out")
@@ -100,16 +119,20 @@ fn main() {
     let args = Args::parse();
 
     let file_contents = fs::read_to_string(&args.input).unwrap();
+    let prelude_contents = fs::read_to_string(&args.prelude_path).unwrap();
     let out_path = args.output.unwrap_or_else(|| out_path(args.input));
 
     let module_bytes = compile(
         &file_contents,
-        args.debug_lexer,
-        args.debug_ast,
-        args.debug_symbols,
-        args.debug_desugar,
-        args.debug_wasm,
-        args.show_wasm_offsets,
+        &prelude_contents,
+        DebugOptions {
+            debug_lexer: args.debug_lexer,
+            debug_ast: args.debug_ast,
+            debug_symbols: args.debug_symbols,
+            debug_desugar: args.debug_desugar,
+            debug_wasm: args.debug_wasm,
+            show_wasm_offsets: args.show_wasm_offsets,
+        },
     );
 
     let module_bytes = if let Ok(module_bytes) = module_bytes {
@@ -122,7 +145,7 @@ fn main() {
     fs::write(&out_path, module_bytes).unwrap();
 
     if !args.no_merge {
-        merge_command(out_path.clone()).unwrap_or_else(|e| {
+        merge_command(out_path.clone(), args.wasm_lib_path).unwrap_or_else(|e| {
             eprintln!("{}", e);
             std::process::exit(1);
         });

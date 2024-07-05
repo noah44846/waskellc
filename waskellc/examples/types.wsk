@@ -1,16 +1,4 @@
-data Bool = True | False;
-
-and :: Bool -> Bool -> Bool;
-and True y = y;
-and False _ = False;
-
-or :: Bool -> Bool -> Bool;
-or True _ = True;
-or False y = y;
-
-if' :: Bool -> a -> a -> a;
-if' True x _ = x;
-if' False _ y = y;
+-- Boolean
 
 boolToInt :: Bool -> Int;
 boolToInt True = 100;
@@ -22,67 +10,86 @@ intToBool _ = True;
 
 boolMain :: Int;
 -- -100 + 100 + -100 = -100
-boolMain = boolToInt (if' (intToBool 0) True False) + boolToInt (if' (intToBool 1) True False) + boolToInt (and (or True False) (and False True));
+boolMain = boolToInt (if' (intToBool 0) True False) + boolToInt (if' (intToBool 1) True False) + boolToInt ((True || False) && (False && True));
 
-data List a = Nil | Cons a (List a);
-
-map :: (a -> b) -> List a -> List b;
-map _ Nil = Nil;
-map f (Cons x xs) = Cons (f x) (map f xs);
-
-fold :: (b -> a -> b) -> b -> List a -> b;
-fold _ z Nil = z;
-fold f z (Cons x xs) = f x (fold f z xs);
-
-repeat :: a -> List a;
-repeat x = Cons x (repeat x);
-
-take :: Int -> List a -> List a;
-take 0 _ = Nil;
-take n Nil = Nil;
-take n (Cons x xs) = Cons x (take (n - 1) xs);
-
-concat :: List a -> List a -> List a;
-concat Nil ys = ys;
-concat (Cons x xs) ys = Cons x (concat xs ys);
+-- List
 
 listMain :: Int;
-listMain = fold (+) 0 (take 10 (map ((*) 2) (repeat 1)));
+listMain = foldr (+) 0 (take 10 (map ((*) 2) (repeat 1)));
 
-data Maybe a = Just a | Nothing;
+--l :: List Int;
+--l = (Cons 1 (Cons 2 (Cons 3 Nil)));
 
-maybe :: b -> (a -> b) -> Maybe a -> b;
-maybe z _ Nothing = z;
-maybe _ f (Just x) = f x;
+--h :: Int -> List Int;
+--h x = Cons x (Cons x Nil);
+
+--t :: List Int;
+--t = maybe Nil id (tail l);
+--t = maybe Nil id (init l);
+
+-- maximum and minimum don't work with since they evaluate the list and then use the evaluated version
+-- scanr doesn't maybe because it evaluates twice ? or make val uses 1 instead of 0
+
+--main :: Int;
+--main = maybe 0 id ((map negate l) !! 1);
+--main = maybe 0 id ((filter odd l) !! 1);
+--main = maybe 0 id ((filter ((>=) 2) l) !! 1);
+--main = foldr (+) 0 l;
+--main = maybe (-1) id ((foldr (Cons) Nil l) !! 1);
+--main = if' (null Nil) 0 1;
+--main = if' (null l) 0 1;
+--main = length l;
+--main = maybe (-1) id (t !! 0);
+--main = maybe (-1) id (last l);
+--main = if' (or (map ((>) (-1)) l)) 1 0;
+--main = if' (and (map ((>) (4)) l)) 1 0;
+--main = if' (any ((>=) 0) l) 1 0;
+--main = if' (all ((>) 4) l) 1 0;
+--main = foldr (+) 0 (concat (Cons l (Cons l Nil)));
+--main = length (fst (splitAt 1 l)) + length (snd (splitAt 1 l));
+--main = maybe (-1) id ((take 8 (cycle l)) !! 4);
+--main = maybe (-1) id ((fst (span ((>=) 2) l)) !! 3);
+--main = maybe (-1) id ((fst (unzip (zip l l))) !! 1);
+--main = sum l;
+--main = sum (concatMap h l);
+--main = maybe (-1) id ((scanl (+) 0 l) !! 3);
+--main = maybe (-1) id ((iterate ((*) 2) 1) !! 10);
+
+-- Tuple
+
+tupleMain :: Int;
+-- 1 + 4 = 5
+tupleMain = uncurry (+) ((,) (curry fst 1 2) (curry snd 1 4));
+
+-- Maybe
 
 maybeMain :: Int;
 -- (2 + 1) + 0 = 3
 maybeMain = (maybe 0 ((+) 2) (Just 1)) + (maybe 0 ((+) 1) Nothing);
 
-data Ratio = Ratio Int Int;
+-- Either
 
-ratioMul :: Ratio -> Ratio -> Ratio;
-ratioMul (Ratio a b) (Ratio c d) = Ratio (a * c) (b * d);
+eitherMain :: Int;
+-- 1+1 + (-1)*2 = 2 - 2 = 0
+eitherMain = either ((+) 1) ((*) 2) (Left 1) + either ((+) 1) ((*) (-1)) (Right 2);
 
-ratioAdd :: Ratio -> Ratio -> Ratio;
-ratioAdd (Ratio a b) (Ratio c d) = Ratio (a * d + b * c) (b * d);
-
-eval :: Ratio -> Int;
-eval (Ratio a b) = a / b;
+-- Ratio
 
 ratioMain :: Int;
--- (1/2 + 1/3) * 12/2 = 5/6 * 6 = 5
-ratioMain = eval (ratioMul (ratioAdd (Ratio 1 2) (Ratio 1 3)) (Ratio 12 2));
+-- (1/2 + 1/3) * 6 = 5/6 * 6 = 5
+ratioMain = evalToInt (mulRatio (addRatio (1 % 2) (1 % 3)) (ratioFromInt 6));
+
+-- Tree
 
 data Tree a = Empty | Node (Tree a) a (Tree a);
 
---foreign export wasm empty :: Tree a;
---empty = Empty;
+foreign export wasm "unevaluated" empty :: Tree a;
+empty = Empty;
 
---foreign export wasm node :: Tree a -> a -> Tree a -> Tree a;
---node = Node;
+foreign export wasm "unevaluated" node :: Tree a -> a -> Tree a -> Tree a;
+node = Node;
 
-foreign export wasm leaf :: a -> Tree a;
+leaf :: a -> Tree a;
 leaf x = Node Empty x Empty;
 
 treeMap :: (a -> b) -> Tree a -> Tree b;
@@ -94,13 +101,10 @@ treeFold _ z Empty = z;
 treeFold f z (Node l x r) = f (treeFold f z l) x (treeFold f z r);
 
 flattenHelper :: List a -> a -> List a -> List a;
-flattenHelper l x r = concat l (Cons x r);
+flattenHelper l x r = l ++ (Cons x r);
 
 foreign export wasm flattenDfs :: Tree a -> List a;
 flattenDfs = treeFold flattenHelper Nil;
-
-add3 :: Int -> Int -> Int -> Int;
-add3 x y z = x + y + z;
 
 exampleTree :: Tree Int;
 exampleTree = Node (Node (leaf 1) 2 (leaf 3)) 4 (leaf 5);
@@ -108,11 +112,13 @@ exampleTree = Node (Node (leaf 1) 2 (leaf 3)) 4 (leaf 5);
 foreign export wasm exampleTreeFlattened :: List Int;
 exampleTreeFlattened = flattenDfs (treeMap ((*) 3) exampleTree);
 
+add3 :: Int -> Int -> Int -> Int;
+add3 x y z = x + y + z;
+
 treeMain :: Int;
--- 2*1 + 2*2 + 2*3 + 2*4 + 2*5 = 30
-treeMain = treeFold add3 0 (treeMap ((*) 2) exampleTree);
+-- 2+1 + 2+2 + 2+3 + 2+4 + 2+5 = 25
+treeMain = treeFold add3 0 (treeMap ((+) 2) exampleTree);
 
 main :: Int;
--- -100 + 20 + 3 + 5 + 30 = -42
--- -100 + 20 + 3 + 5 = -72
-main = boolMain + listMain + maybeMain + ratioMain -- + treeMain;
+-- -100 + 20 + 5 + 3 + 5 + 25 = -42
+main = boolMain + listMain + tupleMain + maybeMain + eitherMain + ratioMain + treeMain;

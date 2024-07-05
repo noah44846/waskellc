@@ -1,0 +1,331 @@
+-- Misc. functions
+
+id :: a -> a;
+id x = x;
+
+const :: a -> b -> a;
+const x _ = x;
+
+flip :: (a -> b -> c) -> b -> a -> c;
+flip f x y = f y x;
+
+(.) :: (b -> c) -> (a -> b) -> a -> c;
+(.) f g x = f (g x);
+
+($) :: (a -> b) -> a -> b;
+($) f x = f x;
+
+until :: (a -> Bool) -> (a -> a) -> a -> a;
+until p f x = if' (p x) x (until p f (f x));
+
+--foreign import wasm "lib" print :: String -> ();
+--foreign import wasm "lib" panic :: () -> ();
+
+--error :: String -> a;
+--error s = panic (print s);
+
+--undefined :: a;
+--undefined = error "undefined";
+
+-- Tuple functions
+
+curry :: ((a, b) -> c) -> a -> b -> c;
+curry f x y = f (x, y);
+
+uncurry :: (a -> b -> c) -> (a, b) -> c;
+uncurry f (x, y) = f x y;
+
+fst :: (a, b) -> a;
+fst (x, _) = x;
+
+snd :: (a, b) -> b;
+snd (_, y) = y;
+
+-- Bool functions
+
+data Bool = True | False;
+
+not :: Bool -> Bool;
+not True = False;
+not False = True;
+
+(&&) :: Bool -> Bool -> Bool;
+(&&) True y = y;
+(&&) False _ = False;
+
+(||) :: Bool -> Bool -> Bool;
+(||) True _ = True;
+(||) False y = y;
+
+if' :: Bool -> a -> a -> a;
+if' True x _ = x;
+if' False _ y = y;
+
+-- Int functions
+
+foreign import wasm "lib" negate :: Int -> Int;
+foreign import wasm "lib" (+) :: Int -> Int -> Int;
+foreign import wasm "lib" (-) :: Int -> Int -> Int;
+foreign import wasm "lib" (*) :: Int -> Int -> Int;
+foreign import wasm "lib" (==) :: Int -> Int -> Bool;
+foreign import wasm "lib" (/=) :: Int -> Int -> Bool;
+foreign import wasm "lib" (<) :: Int -> Int -> Bool;
+foreign import wasm "lib" (>) :: Int -> Int -> Bool;
+foreign import wasm "lib" (<=) :: Int -> Int -> Bool;
+foreign import wasm "lib" (>=) :: Int -> Int -> Bool;
+foreign import wasm "lib" compare :: Int -> Int -> Ordering;
+foreign import wasm "lib" div :: Int -> Int -> Int;
+foreign import wasm "lib" mod :: Int -> Int -> Int;
+
+maxBound :: Int;
+maxBound = 2147483647;
+
+minBound :: Int;
+minBound = (0 - maxBound) - 1;
+
+data Ordering = LT | EQ | GT;
+
+min :: Int -> Int -> Int;
+min x y = if' (x < y) x y;
+
+max :: Int -> Int -> Int;
+max x y = if' (x > y) x y;
+
+abs :: Int -> Int;
+abs x = if' (x < 0) (negate x) x;
+
+(^) :: Int -> Int -> Int;
+(^) _ 0 = 1;
+(^) 0 _ = 0;
+(^) x 1 = x;
+(^) x y = x * (x ^ (y - 1));
+
+even :: Int -> Bool;
+even x = (x `mod` 2) == 0;
+
+odd :: Int -> Bool;
+odd = not . even;
+
+-- List functions
+
+data List a = Nil | Cons a (List a);
+
+map :: (a -> b) -> List a -> List b;
+map _ Nil = Nil;
+map f (Cons x xs) = Cons (f x) (map f xs);
+
+(++) :: List a -> List a -> List a;
+(++) Nil ys = ys;
+(++) (Cons x xs) ys = Cons x (xs ++ ys);
+
+filter :: (a -> Bool) -> List a -> List a;
+filter _ Nil = Nil;
+filter p (Cons x xs) = if' (p x) (Cons x (filter p xs)) (filter p xs);
+
+head :: List a -> Maybe a;
+head (Cons x _) = Just x;
+head Nil = Nothing;
+
+last :: List a -> Maybe a;
+last (Cons x Nil) = Just x;
+last (Cons _ xs) = last xs;
+last Nil = Nothing;
+
+tail :: List a -> Maybe (List a);
+tail (Cons _ xs) = Just xs;
+tail Nil = Nothing;
+
+init :: List a -> Maybe (List a);
+init Nil = Nothing;
+init (Cons _ Nil) = Just Nil;
+init (Cons x xs) = Just (Cons x (maybe Nil id (init xs)));
+
+null :: List a -> Bool;
+null Nil = True;
+null _ = False;
+
+length :: List a -> Int;
+length Nil = 0;
+length (Cons _ xs) = 1 + length xs;
+
+(!!) :: List a -> Int -> Maybe a;
+(!!) (Cons x _) 0 = Just x;
+(!!) (Cons _ xs) n = xs !! (n - 1);
+(!!) Nil _ = Nothing;
+
+reverse :: List a -> List a;
+reverse = foldl (flip Cons) Nil;
+
+-- List functions: reducing operations
+
+foldl :: (b -> a -> b) -> b -> List a -> b;
+foldl _ z Nil = z;
+foldl f z (Cons x xs) = foldl f (f z x) xs;
+
+foldr :: (a -> b -> b) -> b -> List a -> b;
+foldr _ z Nil = z;
+foldr f z (Cons x xs) = f x (foldr f z xs);
+
+and :: List Bool -> Bool;
+and = foldr (&&) True;
+
+or :: List Bool -> Bool;
+or = foldr (||) False;
+
+any :: (a -> Bool) -> List a -> Bool;
+any p = or . map p; -- precendence
+
+all :: (a -> Bool) -> List a -> Bool;
+all p = and . map p;
+
+sum :: List Int -> Int;
+sum = foldl (+) 0;
+
+product :: List Int -> Int;
+product = foldl (*) 1;
+
+concat :: List (List a) -> List a;
+concat = foldr (++) Nil;
+
+concatMap :: (a -> List b) -> List a -> List b;
+concatMap f = concat . map f;
+
+maximum :: List Int -> Maybe Int;
+maximum Nil = Nothing;
+maximum xs = Just (foldr max minBound xs);
+
+minimum :: List Int -> Maybe Int;
+minimum Nil = Nothing;
+minimum xs = Just (foldr min maxBound xs);
+
+-- List functions: building operations
+
+scanl :: (b -> a -> b) -> b -> List a -> List b;
+scanl _ z Nil = Cons z Nil;
+scanl f z (Cons x xs) = Cons z (scanl f (f z x) xs);
+
+scanr :: (a -> b -> b) -> b -> List a -> List b;
+scanr _ z Nil = Cons z Nil;
+scanr f z (Cons x xs) = Cons (f x (head (scanr f z xs))) (scanr f z xs);
+
+iterate :: (a -> a) -> a -> List a;
+iterate f x = Cons x (iterate f (f x));
+
+repeat :: a -> List a;
+repeat x = Cons x (repeat x);
+
+replicate :: Int -> a -> List a;
+replicate n = take n . repeat;
+
+cycle :: List a -> List a;
+cycle xs = xs ++ cycle xs;
+
+-- List functions: sublists
+
+take :: Int -> List a -> List a;
+take 0 _ = Nil;
+take n Nil = Nil;
+take n (Cons x xs) = Cons x (take (n - 1) xs);
+
+drop :: Int -> List a -> List a;
+drop 0 xs = xs;
+drop n Nil = Nil;
+drop n (Cons _ xs) = drop (n - 1) xs;
+
+splitAt :: Int -> List a -> (List a, List a);
+splitAt n xs = (take n xs, drop n xs);
+
+takeWhile :: (a -> Bool) -> List a -> List a;
+takeWhile _ Nil = Nil;
+takeWhile p (Cons x xs) = if' (p x) (Cons x (takeWhile p xs)) Nil;
+
+dropWhile :: (a -> Bool) -> List a -> List a;
+dropWhile _ Nil = Nil;
+dropWhile p (Cons x xs) = if' (p x) (dropWhile p xs) (Cons x xs);
+
+span :: (a -> Bool) -> List a -> (List a, List a);
+span p xs = (takeWhile p xs, dropWhile p xs);
+
+break :: (a -> Bool) -> List a -> (List a, List a);
+break p = span (not . p);
+
+-- List functions: zipping
+
+zip :: List a -> List b -> List (a, b);
+zip Nil _ = Nil;
+zip _ Nil = Nil;
+zip (Cons x xs) (Cons y ys) = Cons (x, y) (zip xs ys);
+
+zipWith :: (a -> b -> c) -> List a -> List b -> List c;
+zipWith _ Nil _ = Nil;
+zipWith _ _ Nil = Nil;
+zipWith f (Cons x xs) (Cons y ys) = Cons (f x y) (zipWith f xs ys);
+
+unzip :: List (a, b) -> (List a, List b);
+unzip Nil = (Nil, Nil);
+unzip (Cons (x, y) xys) = (Cons x (fst (unzip xys)), Cons y (snd (unzip xys)));
+
+data Maybe a = Just a | Nothing;
+
+maybe :: b -> (a -> b) -> Maybe a -> b;
+maybe z _ Nothing = z;
+maybe _ f (Just x) = f x;
+
+isJust :: Maybe a -> Bool;
+isJust (Just _) = True;
+isJust Nothing = False;
+
+isNothing :: Maybe a -> Bool;
+isNothing = not . isJust;
+
+-- Either functions
+
+data Either a b = Left a | Right b;
+
+either :: (a -> c) -> (b -> c) -> Either a b -> c;
+either f _ (Left x) = f x;
+either _ g (Right y) = g y;
+
+isLeft :: Either a b -> Bool;
+isLeft (Left _) = True;
+isLeft (Right _) = False;
+
+isRight :: Either a b -> Bool;
+isRight = not . isLeft;
+
+-- Ratio functions
+
+data Ratio = Ratio Int Int;
+
+(%) :: Int -> Int -> Ratio;
+(%) a b = Ratio a b;
+
+numerator :: Ratio -> Int;
+numerator (Ratio a _) = a;
+
+denominator :: Ratio -> Int;
+denominator (Ratio _ b) = b;
+
+ratioFromInt :: Int -> Ratio;
+ratioFromInt x = Ratio x 1;
+
+addRatio :: Ratio -> Ratio -> Ratio;
+addRatio (Ratio a b) (Ratio c d) = Ratio (a * d + b * c) (b * d);
+
+mulRatio :: Ratio -> Ratio -> Ratio;
+mulRatio (Ratio a b) (Ratio c d) = Ratio (a * c) (b * d);
+
+negateRatio :: Ratio -> Ratio;
+negateRatio (Ratio a b) = Ratio (-a) b;
+
+subRatio :: Ratio -> Ratio -> Ratio;
+subRatio a b = addRatio a (negateRatio b);
+
+recipRatio :: Ratio -> Ratio;
+recipRatio (Ratio a b) = Ratio b a;
+
+divRatio :: Ratio -> Ratio -> Ratio;
+divRatio a b = mulRatio a (recipRatio b);
+
+evalToInt :: Ratio -> Int;
+evalToInt (Ratio a b) = a `div` b;

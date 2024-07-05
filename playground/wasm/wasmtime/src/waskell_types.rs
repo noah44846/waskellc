@@ -45,6 +45,7 @@ pub fn waskell_types_main() -> Result<()> {
         ),
         &instance,
         &mut store,
+        &memory,
     )?;
 
     let list_ptr = flatten_dfs.call(&mut store, tree_ptr)?;
@@ -66,19 +67,33 @@ fn create_waskell_tree(
     tree: WaskellIntTree,
     instance: &Instance,
     store: &mut Store<WasiCtx>,
+    memory: &Memory,
 ) -> Result<u32> {
-    let empty = instance.get_typed_func::<(), u32>(&mut *store, "empty")?;
-    let node = instance.get_typed_func::<(u32, i32, u32), u32>(&mut *store, "node")?;
+    fn create_waskell_tree_aux(
+        tree: WaskellIntTree,
+        instance: &Instance,
+        store: &mut Store<WasiCtx>,
+    ) -> Result<u32> {
+        let empty = instance.get_typed_func::<(), u32>(&mut *store, "empty")?;
+        let node = instance.get_typed_func::<(u32, u32, u32), u32>(&mut *store, "node")?;
+        let make_val = instance.get_typed_func::<(i32, i32), u32>(&mut *store, ":make_val")?;
 
-    match tree {
-        WaskellIntTree::Nil => empty.call(&mut *store, ()),
-        WaskellIntTree::Node(left, value, right) => {
-            let left_ptr = create_waskell_tree(*left, instance, store)?;
-            let right_ptr = create_waskell_tree(*right, instance, store)?;
+        match tree {
+            WaskellIntTree::Nil => empty.call(&mut *store, ()),
+            WaskellIntTree::Node(left, value, right) => {
+                let left_ptr = create_waskell_tree_aux(*left, instance, store)?;
+                let right_ptr = create_waskell_tree_aux(*right, instance, store)?;
 
-            node.call(&mut *store, (left_ptr, value, right_ptr))
+                let value = make_val.call(&mut *store, (0, value))?;
+                node.call(&mut *store, (left_ptr, value, right_ptr))
+            }
         }
     }
+
+    let res = create_waskell_tree_aux(tree, instance, store)?;
+    let mut buf = [0u8; 5];
+    memory.read(store, res as usize, &mut buf)?;
+    Ok(u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]))
 }
 
 fn parse_waskell_list(ptr: u32, store: &Store<WasiCtx>, memory: &Memory) -> Result<Vec<i32>> {
