@@ -1,12 +1,12 @@
 (module
-  (import "alloc" "memory" (memory 1))
-  (import "alloc" "alloc" (func $alloc (param i32) (result i32)))
-  (import "alloc" "dealloc" (func $dealloc (param i32 i32)))
-  (;(import "alloc" "print" (func $print (param i32)));)
+  (import "rust_lib" "memory" (memory 1))
+  (import "rust_lib" "alloc" (func $alloc (param i32) (result i32)))
+  (import "rust_lib" "dealloc" (func $dealloc (param i32 i32)))
+  (import "rust_lib" "rust_print" (func $print (param i32)))
   (type $ap0 (func (result i32)))
   (type $ap1 (func (param i32) (result i32)))
   (type $ap2 (func (param i32 i32) (result i32)))
-  (table (export "table") 128 funcref)
+  (table (export "table") 1024 funcref)
   (elem (i32.const 0) $dummy) ;; will be overwritten be the merge
 
   (func $dummy (param i32 i32) (result i32)
@@ -163,9 +163,19 @@
     (local.get $a)
   )
 
-  (;(func (export "panic") (param $ptr i32);)
-    (;(unreachable);)
-  (;);)
+  (func (export "panic") (param $ptr i32) (result i32)
+    (drop (call $full_eval (local.get $ptr)))
+    (unreachable)
+  )
+
+  (func (export "print") (param $ptr i32) (result i32)
+    (local.set $ptr (call $full_eval (local.get $ptr)))
+    (call $print (local.get $ptr))
+    (local.set $ptr (call $make_env (i32.const 1)))
+    (i32.store (local.get $ptr) (i32.const 0))
+    (i32.store offset=4 (local.get $ptr) (i32.const 0))
+    (call $make_val (i32.const 1) (local.get $ptr))
+  )
 
   (func (export "negate") (param $x i32) (result i32)
     (return (call $make_val
@@ -230,7 +240,7 @@
     (i32.store (local.get $a) (i32.const 0))
     (i32.store offset=4
       (local.get $a)
-      (i32.gt_s
+      (i32.ge_s
         (call $full_eval (local.get $x))
         (call $full_eval (local.get $y))))
     (return (call $make_val (i32.const 1) (local.get $a)))
@@ -242,7 +252,7 @@
     (i32.store (local.get $a) (i32.const 0))
     (i32.store offset=4
       (local.get $a)
-      (i32.lt_s
+      (i32.le_s
         (call $full_eval (local.get $x))
         (call $full_eval (local.get $y))))
     (return (call $make_val (i32.const 1) (local.get $a)))
@@ -254,7 +264,7 @@
     (i32.store (local.get $a) (i32.const 0))
     (i32.store offset=4
       (local.get $a)
-      (i32.lt_s
+      (i32.gt_s
         (call $full_eval (local.get $x))
         (call $full_eval (local.get $y))))
     (return (call $make_val (i32.const 1) (local.get $a)))
@@ -266,7 +276,7 @@
     (i32.store (local.get $a) (i32.const 0))
     (i32.store offset=4
       (local.get $a)
-      (i32.gt_s
+      (i32.lt_s
         (call $full_eval (local.get $x))
         (call $full_eval (local.get $y))))
     (return (call $make_val (i32.const 1) (local.get $a)))
@@ -306,6 +316,10 @@
       (i32.rem_s
         (call $full_eval (local.get $x))
         (call $full_eval (local.get $y)))))
+  )
+
+  (func (export "intToChar") (param $x i32) (result i32)
+    (local.get $x)
   )
 
   (func $eval (export ":eval") (param $ptr i32) (result i32)

@@ -18,14 +18,14 @@ flip f x y = f y x;
 until :: (a -> Bool) -> (a -> a) -> a -> a;
 until p f x = if' (p x) x (until p f (f x));
 
---foreign import wasm "lib" print :: String -> ();
---foreign import wasm "lib" panic :: () -> ();
+foreign import wasm "lib" print :: String -> ();
+foreign import wasm "lib" panic :: () -> a;
 
---error :: String -> a;
---error s = panic (print s);
+error :: String -> a;
+error s = panic (print ("Exception: " ++ s));
 
---undefined :: a;
---undefined = error "undefined";
+undefined :: a;
+undefined = error "undefined";
 
 -- Tuple functions
 
@@ -61,6 +61,15 @@ if' :: Bool -> a -> a -> a;
 if' True x _ = x;
 if' False _ y = y;
 
+boolToString :: Bool -> String;
+boolToString True = "True";
+boolToString False = "False";
+
+boolEq :: Bool -> Bool -> Bool;
+boolEq True True = True;
+boolEq False False = True;
+boolEq _ _ = False;
+
 -- Int functions
 
 foreign import wasm "lib" negate :: Int -> Int;
@@ -76,6 +85,7 @@ foreign import wasm "lib" (>=) :: Int -> Int -> Bool;
 foreign import wasm "lib" compare :: Int -> Int -> Ordering;
 foreign import wasm "lib" div :: Int -> Int -> Int;
 foreign import wasm "lib" mod :: Int -> Int -> Int;
+foreign import wasm "lib" intToChar :: Int -> Char;
 
 maxBound :: Int;
 maxBound = 2147483647;
@@ -106,9 +116,59 @@ even x = (x `mod` 2) == 0;
 odd :: Int -> Bool;
 odd = not . even;
 
+intToString :: Int -> String;
+intToString x = if' (x < 0) (Cons '-' (intToString (negate x))) (if' (x < 10) (Cons (intToChar (x + 48)) Nil) ((intToString (x `div` 10)) ++ (Cons (intToChar ((x `mod` 10) + 48)) Nil)));
+
 -- List functions
 
 data List a = Nil | Cons a (List a);
+--l :: List Int;
+--l = (Cons 1 (Cons 2 (Cons 3 Nil)));
+
+--h :: Int -> List Int;
+--h x = Cons x (Cons x Nil);
+
+--t :: List Int;
+--t = maybe Nil id (tail l);
+--t = maybe Nil id (init l);
+
+-- maximum and minimum don't work with since they evaluate the list and then use the evaluated version
+-- scanr doesn't maybe because it evaluates twice ? or make val uses 1 instead of 0
+
+--main :: Int;
+--main = maybe 0 id ((map negate l) !! 1);
+--main = maybe 0 id ((filter odd l) !! 1);
+--main = maybe 0 id ((filter ((>=) 2) l) !! 1);
+--main = foldr (+) 0 l;
+--main = maybe (-1) id ((foldr (Cons) Nil l) !! 1);
+--main = if' (null Nil) 0 1;
+--main = if' (null l) 0 1;
+--main = length l;
+--main = maybe (-1) id (t !! 0);
+--main = maybe (-1) id (last l);
+--main = if' (or (map ((>) (-1)) l)) 1 0;
+--main = if' (and (map ((>) (4)) l)) 1 0;
+--main = if' (any ((>=) 0) l) 1 0;
+--main = if' (all ((>) 4) l) 1 0;
+--main = foldr (+) 0 (concat (Cons l (Cons l Nil)));
+--main = length (fst (splitAt 1 l)) + length (snd (splitAt 1 l));
+--main = maybe (-1) id ((take 8 (cycle l)) !! 4);
+--main = maybe (-1) id ((fst (span ((>=) 2) l)) !! 3);
+--main = maybe (-1) id ((fst (unzip (zip l l))) !! 1);
+--main = sum l;
+--main = sum (concatMap h l);
+--main = maybe (-1) id ((scanl (+) 0 l) !! 3);
+--main = maybe (-1) id ((iterate ((*) 2) 1) !! 10);
+
+listToString :: (a -> String) -> List a -> String;
+listToString _ Nil = "Nil";
+listToString f (Cons x xs) = "Cons " ++ (f x) ++ " (" ++ (listToString f xs) ++ ")";
+
+listEq :: (a -> a -> Bool) -> List a -> List a -> Bool;
+listEq _ Nil Nil = True;
+listEq _ Nil _ = False;
+listEq _ _ Nil = False;
+listEq f (Cons x xs) (Cons y ys) = if' (f x y) (listEq f xs ys) False;
 
 map :: (a -> b) -> List a -> List b;
 map _ Nil = Nil;
@@ -150,7 +210,7 @@ length (Cons _ xs) = 1 + length xs;
 
 (!!) :: List a -> Int -> Maybe a;
 (!!) (Cons x _) 0 = Just x;
-(!!) (Cons _ xs) n = xs !! (n - 1);
+(!!) (Cons _ xs) n = if' (n >= 0) (xs !! (n - 1)) Nothing;
 (!!) Nil _ = Nothing;
 
 reverse :: List a -> List a;
@@ -278,6 +338,16 @@ isJust Nothing = False;
 isNothing :: Maybe a -> Bool;
 isNothing = not . isJust;
 
+maybeToString :: (a -> String) -> Maybe a -> String;
+maybeToString _ Nothing = "Nothing";
+maybeToString f (Just x) = "Just " ++ (f x);
+
+maybeEq :: (a -> a -> Bool) -> Maybe a -> Maybe a -> Bool;
+maybeEq _ Nothing Nothing = True;
+maybeEq _ Nothing _ = False;
+maybeEq _ _ Nothing = False;
+maybeEq f (Just x) (Just y) = f x y;
+
 -- Either functions
 
 data Either a b = Left a | Right b;
@@ -292,6 +362,16 @@ isLeft (Right _) = False;
 
 isRight :: Either a b -> Bool;
 isRight = not . isLeft;
+
+eitherToString :: (a -> String) -> (b -> String) -> Either a b -> String;
+eitherToString f _ (Left x) = "Left " ++ (f x);
+eitherToString _ g (Right y) = "Right " ++ (g y);
+
+eitherEq :: (a -> a -> Bool) -> (b -> b -> Bool) -> Either a b -> Either a b -> Bool;
+eitherEq _ _ (Left x) (Right y) = False;
+eitherEq _ _ (Right x) (Left y) = False;
+eitherEq f _ (Left x) (Left y) = f x y;
+eitherEq _ g (Right x) (Right y) = g x y;
 
 -- Ratio functions
 
@@ -329,3 +409,9 @@ divRatio a b = mulRatio a (recipRatio b);
 
 evalToInt :: Ratio -> Int;
 evalToInt (Ratio a b) = a `div` b;
+
+ratioToString :: Ratio -> String;
+ratioToString (Ratio a b) = (intToString a) ++ " % " ++ (intToString b);
+
+ratioEq :: Ratio -> Ratio -> Bool;
+ratioEq a b = (numerator a == numerator b) && (denominator a == denominator b);

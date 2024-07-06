@@ -118,7 +118,8 @@ impl CodeGen {
             .map(|s| s.as_ref().borrow())
             .filter(|s| s.is_imported())
             .map(|s| {
-                let ty_idx = self.func_ty_idx_from_symbol(&s, true)?;
+                let remove_return_when_unit = !matches!(s.import_module_name(), Some("lib"));
+                let ty_idx = self.func_ty_idx_from_symbol(&s, remove_return_when_unit)?;
                 let module_name = s.import_module_name().unwrap();
                 self.imports
                     .as_mut()
@@ -740,7 +741,6 @@ impl CodeGen {
                 let input_local_idx =
                     self.generate_instructions_for_expr(context, input_expr, locals, instrs)?;
 
-                let mut is_input_evaluated = false;
                 for branch in branches {
                     let validator::CaseBranch {
                         pattern,
@@ -750,8 +750,7 @@ impl CodeGen {
                     instrs.push(Instruction::Block(BlockType::Empty));
 
                     let mut scope = context.to_vec();
-                    is_input_evaluated = self.generate_instructions_for_case_branch(
-                        is_input_evaluated,
+                    self.generate_instructions_for_case_branch(
                         input_local_idx,
                         &mut scope,
                         pattern,
@@ -827,13 +826,12 @@ impl CodeGen {
     /// Returns if the input expression has been evaluated
     fn generate_instructions_for_case_branch<'a>(
         &mut self,
-        mut is_input_evaluated: bool,
         input_local_idx: u32,
         context: &mut Vec<(u32, &'a str)>,
         pattern: &'a validator::CaseBranchPattern,
         locals: &mut WasmFunctionLocals,
         instrs: &mut Vec<Instruction>,
-    ) -> Result<bool, String> {
+    ) -> Result<(), String> {
         let eval_idx = self
             .functions
             .as_mut()
@@ -843,6 +841,29 @@ impl CodeGen {
 
         match pattern {
             validator::CaseBranchPattern::Wildcard => {}
+            validator::CaseBranchPattern::Unit => {
+                let eval_local_idx = locals.add_local(ValType::I32);
+                instrs.push(Instruction::LocalGet(input_local_idx));
+                instrs.push(Instruction::Call(eval_idx));
+                instrs.push(Instruction::I32Load(MemArg {
+                    // load data constructor env
+                    align: 2,
+                    offset: 1,
+                    memory_index: 0,
+                }));
+                instrs.push(Instruction::LocalTee(eval_local_idx)); // store the data constructor env
+
+                instrs.push(Instruction::I32Load(MemArg {
+                    // load data constructor index
+                    align: 2,
+                    offset: 4,
+                    memory_index: 0,
+                }));
+
+                instrs.push(Instruction::I32Const(0));
+                instrs.push(Instruction::I32Ne);
+                instrs.push(Instruction::BrIf(0)); // if the input is not equal to the expected value, skip the branch
+            }
             validator::CaseBranchPattern::AsPattern(var_name, as_pattern) => {
                 let var_local_idx = locals.add_local(ValType::I32);
 
@@ -852,8 +873,7 @@ impl CodeGen {
                 context.push((var_local_idx, var_name));
 
                 if let Some(as_pattern) = as_pattern {
-                    is_input_evaluated = self.generate_instructions_for_case_branch(
-                        is_input_evaluated,
+                    self.generate_instructions_for_case_branch(
                         input_local_idx,
                         context,
                         as_pattern,
@@ -863,18 +883,17 @@ impl CodeGen {
                 }
             }
             validator::CaseBranchPattern::IntLiteral(val) => {
+                let eval_local_idx = locals.add_local(ValType::I32);
+
                 instrs.push(Instruction::LocalGet(input_local_idx));
-                if !is_input_evaluated {
-                    is_input_evaluated = true;
-                    instrs.push(Instruction::Call(eval_idx));
-                    instrs.push(Instruction::I32Load(MemArg {
-                        // load data constructor env
-                        align: 2,
-                        offset: 1,
-                        memory_index: 0,
-                    }));
-                    instrs.push(Instruction::LocalTee(input_local_idx)); // store the data constructor env
-                }
+                instrs.push(Instruction::Call(eval_idx));
+                instrs.push(Instruction::I32Load(MemArg {
+                    // load data constructor env
+                    align: 2,
+                    offset: 1,
+                    memory_index: 0,
+                }));
+                instrs.push(Instruction::LocalTee(eval_local_idx)); // store the data constructor env
 
                 instrs.push(Instruction::I32Const(*val));
                 instrs.push(Instruction::I32Ne);
@@ -890,18 +909,17 @@ impl CodeGen {
                     .data_constructor_idx
                     .unwrap();
 
+                let eval_local_idx = locals.add_local(ValType::I32);
+
                 instrs.push(Instruction::LocalGet(input_local_idx));
-                if !is_input_evaluated {
-                    is_input_evaluated = true;
-                    instrs.push(Instruction::Call(eval_idx));
-                    instrs.push(Instruction::I32Load(MemArg {
-                        // load data constructor env
-                        align: 2,
-                        offset: 1,
-                        memory_index: 0,
-                    }));
-                    instrs.push(Instruction::LocalTee(input_local_idx)); // store the data constructor env
-                }
+                instrs.push(Instruction::Call(eval_idx));
+                instrs.push(Instruction::I32Load(MemArg {
+                    // load data constructor env
+                    align: 2,
+                    offset: 1,
+                    memory_index: 0,
+                }));
+                instrs.push(Instruction::LocalTee(eval_local_idx)); // store the data constructor env
 
                 instrs.push(Instruction::I32Load(MemArg {
                     // load data constructor index
@@ -917,7 +935,7 @@ impl CodeGen {
                 for (i, field) in fields.iter().enumerate() {
                     let field_local_idx = locals.add_local(ValType::I32);
 
-                    instrs.push(Instruction::LocalGet(input_local_idx));
+                    instrs.push(Instruction::LocalGet(eval_local_idx));
                     instrs.push(Instruction::I32Load(MemArg {
                         align: 2,
                         offset: ((i + 2) * 4) as u64,
@@ -926,7 +944,6 @@ impl CodeGen {
                     instrs.push(Instruction::LocalSet(field_local_idx));
 
                     self.generate_instructions_for_case_branch(
-                        false,
                         field_local_idx,
                         context,
                         field,
@@ -937,21 +954,18 @@ impl CodeGen {
             }
             validator::CaseBranchPattern::Tuple(patterns) => {
                 for (i, pattern) in patterns.iter().enumerate() {
-                    let field_local_idx = locals.add_local(ValType::I32);
-
+                    let eval_local_idx = locals.add_local(ValType::I32);
                     instrs.push(Instruction::LocalGet(input_local_idx));
-                    if !is_input_evaluated {
-                        is_input_evaluated = true;
-                        instrs.push(Instruction::Call(eval_idx));
-                        instrs.push(Instruction::I32Load(MemArg {
-                            // load data constructor env
-                            align: 2,
-                            offset: 1,
-                            memory_index: 0,
-                        }));
-                        instrs.push(Instruction::LocalTee(input_local_idx)); // store the data constructor env
-                    }
+                    instrs.push(Instruction::Call(eval_idx));
+                    instrs.push(Instruction::I32Load(MemArg {
+                        // load data constructor env
+                        align: 2,
+                        offset: 1,
+                        memory_index: 0,
+                    }));
+                    instrs.push(Instruction::LocalTee(eval_local_idx)); // store the data constructor env
 
+                    let field_local_idx = locals.add_local(ValType::I32);
                     instrs.push(Instruction::I32Load(MemArg {
                         align: 2,
                         offset: ((i + 2) * 4) as u64,
@@ -960,7 +974,6 @@ impl CodeGen {
                     instrs.push(Instruction::LocalSet(field_local_idx));
 
                     self.generate_instructions_for_case_branch(
-                        false,
                         field_local_idx,
                         context,
                         pattern,
@@ -971,7 +984,7 @@ impl CodeGen {
             }
         }
 
-        Ok(is_input_evaluated)
+        Ok(())
     }
 
     fn make_env_wrapper(
@@ -1059,7 +1072,7 @@ impl CodeGen {
             params,
         )?;
 
-        if num_params != func.arity().into() {
+        if num_params != func.arity() as usize {
             instrs.push(Instruction::I32Const(func_ty_idx as i32));
             instrs.push(Instruction::I32Const(func.arity().into()));
             instrs.push(Instruction::I32Const(num_params as i32));
@@ -1101,7 +1114,7 @@ impl CodeGen {
             ))?;
 
         if is_partial {
-            println!("Partial application not implemented for functions passed as parameters");
+            println!("Partial application for functions passed as parameters is unstable");
             for param in params {
                 let rec_local_idx =
                     self.generate_instructions_for_expr(context, param, locals, instrs)?;
@@ -1161,7 +1174,10 @@ impl CodeGen {
                 offset: 0,
                 memory_index: 0,
             }));
-            instrs.push(Instruction::CallIndirect { ty: idx, table: 0 });
+            instrs.push(Instruction::CallIndirect {
+                type_index: idx,
+                table_index: 0,
+            });
 
             if ret_ty.is_none() {
                 instrs.push(Instruction::I32Const(0));

@@ -17,44 +17,6 @@ boolMain = boolToInt (if' (intToBool 0) True False) + boolToInt (if' (intToBool 
 listMain :: Int;
 listMain = foldr (+) 0 (take 10 (map ((*) 2) (repeat 1)));
 
---l :: List Int;
---l = (Cons 1 (Cons 2 (Cons 3 Nil)));
-
---h :: Int -> List Int;
---h x = Cons x (Cons x Nil);
-
---t :: List Int;
---t = maybe Nil id (tail l);
---t = maybe Nil id (init l);
-
--- maximum and minimum don't work with since they evaluate the list and then use the evaluated version
--- scanr doesn't maybe because it evaluates twice ? or make val uses 1 instead of 0
-
---main :: Int;
---main = maybe 0 id ((map negate l) !! 1);
---main = maybe 0 id ((filter odd l) !! 1);
---main = maybe 0 id ((filter ((>=) 2) l) !! 1);
---main = foldr (+) 0 l;
---main = maybe (-1) id ((foldr (Cons) Nil l) !! 1);
---main = if' (null Nil) 0 1;
---main = if' (null l) 0 1;
---main = length l;
---main = maybe (-1) id (t !! 0);
---main = maybe (-1) id (last l);
---main = if' (or (map ((>) (-1)) l)) 1 0;
---main = if' (and (map ((>) (4)) l)) 1 0;
---main = if' (any ((>=) 0) l) 1 0;
---main = if' (all ((>) 4) l) 1 0;
---main = foldr (+) 0 (concat (Cons l (Cons l Nil)));
---main = length (fst (splitAt 1 l)) + length (snd (splitAt 1 l));
---main = maybe (-1) id ((take 8 (cycle l)) !! 4);
---main = maybe (-1) id ((fst (span ((>=) 2) l)) !! 3);
---main = maybe (-1) id ((fst (unzip (zip l l))) !! 1);
---main = sum l;
---main = sum (concatMap h l);
---main = maybe (-1) id ((scanl (+) 0 l) !! 3);
---main = maybe (-1) id ((iterate ((*) 2) 1) !! 10);
-
 -- Tuple
 
 tupleMain :: Int;

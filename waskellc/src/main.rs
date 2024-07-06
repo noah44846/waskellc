@@ -2,6 +2,7 @@
 
 use std::{fs, path::PathBuf, process::Command};
 
+use anyhow::anyhow;
 use clap::Parser;
 
 use waskellc::{compile, DebugOptions};
@@ -80,7 +81,7 @@ fn out_path(in_path: PathBuf) -> PathBuf {
     out_path
 }
 
-fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), String> {
+fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), anyhow::Error> {
     let mut cmd;
 
     if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
@@ -92,7 +93,7 @@ fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), String
     } else if cfg!(target_os = "macos") && cfg!(target_arch = "arm64") {
         cmd = Command::new("./binaryen-tools/arm64/macos/bin/wasm-merge");
     } else {
-        return Err("Unsupported platform".to_string());
+        return Err(anyhow!("Unsupported platform"));
     }
 
     let out = cmd
@@ -102,13 +103,12 @@ fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), String
         .arg("out")
         .arg("-o")
         .arg(&out_path)
-        .output()
-        .expect("Failed to merge wasm files");
+        .output()?;
 
     if out.status.success() {
         Ok(())
     } else {
-        Err(format!(
+        Err(anyhow!(
             "Failed to merge wasm files : {}",
             String::from_utf8_lossy(&out.stderr)
         ))
@@ -149,5 +149,56 @@ fn main() {
             eprintln!("{}", e);
             std::process::exit(1);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, io::Write};
+
+    use anyhow::anyhow;
+    use tempfile::NamedTempFile;
+    use wasi_common::sync::WasiCtxBuilder;
+    use wasmtime::*;
+
+    use super::*;
+
+    const DEFAULT_PRELUDE_PATH: &str = "lib/prelude.wsk";
+    const DEFAULT_PRELUDE_TEST: &str = include_str!("../examples/prelude_test.wsk");
+
+    #[test]
+    fn test_prelude() -> Result<()> {
+        let prelude_contents = fs::read_to_string(DEFAULT_PRELUDE_PATH).unwrap();
+
+        let result = compile(
+            DEFAULT_PRELUDE_TEST,
+            &prelude_contents,
+            DebugOptions::default(),
+        )
+        .map_err(|e| anyhow!(e))?;
+
+        let mut temp_file = NamedTempFile::new()?;
+        temp_file.write_all(&result)?;
+
+        merge_command(
+            PathBuf::from(temp_file.path()),
+            PathBuf::from(DEFAULT_WASM_LIB_PATH),
+        )
+        .map_err(|e| anyhow!(e))?;
+
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
+
+        let wasi = WasiCtxBuilder::new().inherit_stdio().build();
+        let mut store = Store::new(&engine, wasi);
+
+        let module = Module::from_file(store.engine(), temp_file.path())?;
+        let instance = linker.instantiate(&mut store, &module)?;
+
+        let main = instance.get_typed_func::<(), ()>(&mut store, "main")?;
+        main.call(&mut store, ())?;
+
+        Ok(())
     }
 }

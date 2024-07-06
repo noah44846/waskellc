@@ -177,6 +177,7 @@ pub enum CaseBranchPattern {
         fields: Vec<CaseBranchPattern>,
     },
     Tuple(Vec<CaseBranchPattern>),
+    Unit,
     Wildcard,
 }
 
@@ -212,6 +213,7 @@ impl fmt::Debug for CaseBranchPattern {
             ),
             CaseBranchPattern::Tuple(pats) if f.alternate() => write!(f, "Tuple({:#?})", pats),
             CaseBranchPattern::Tuple(pats) => write!(f, "Tuple({:?})", pats),
+            CaseBranchPattern::Unit => write!(f, "Unit"),
             CaseBranchPattern::Wildcard => write!(f, "Wildcard"),
         }
     }
@@ -703,7 +705,7 @@ fn parser_pattern_to_branch_pattern(
         ast_gen::FunctionParameterPattern::EmptyTuplePattern(_) => {
             Err("Empty tuple pattern".to_string())
         }
-        ast_gen::FunctionParameterPattern::UnitPattern => todo!(),
+        ast_gen::FunctionParameterPattern::UnitPattern => Ok(CaseBranchPattern::Unit),
     }
 }
 

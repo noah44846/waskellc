@@ -1,0 +1,471 @@
+test :: (a -> a -> Bool) -> (a -> String) -> a -> a -> String -> ();
+test comparator printer x y name = if' (comparator x y) (print (name ++ " passed")) (error (name ++ " failed, expected: " ++ (printer y) ++ " but got: " ++ (printer x)));
+
+evalUnitList :: List () -> ();
+evalUnitList Nil = ();
+evalUnitList (Cons () xs) = evalUnitList xs;
+
+-- Partial application tests
+
+add :: Int -> Int -> Int;
+add = (+);
+
+plusOne :: Int -> Int;
+plusOne = (+) 1;
+
+add' :: Int -> Int -> Int;
+add' x = (+) x;
+
+apply1 :: (a -> b) -> a -> b;
+apply1 f = f;
+
+apply2 :: (a -> b -> c) -> a -> b -> c;
+apply2 f x y = ((f) x) y;
+-- equivalent to: f x y
+
+apply2' :: (a -> b -> c) -> a -> b -> c;
+apply2' f = f;
+
+apply2Flip :: a -> (a -> b -> c) -> (b -> c);
+-- equivalent to: a -> (a -> b -> c) -> b -> c
+apply2Flip x f = f x;
+
+apply2With2 :: (Int -> b -> c) -> b -> c;
+apply2With2 f = apply1 (f 2);
+
+papTest1 :: ();
+papTest1 = test (==) intToString (apply2 add 1 2) 3 "papTest1";
+
+papTest2 :: ();
+papTest2 = test (==) intToString (apply2Flip 1 add' 2) 3 "papTest2";
+
+papTest3 :: ();
+papTest3 = test (==) intToString (apply2' (*) (-3) (-1)) 3 "papTest3";
+
+papTest4 :: ();
+papTest4 = test (==) intToString (plusOne 2) 3 "papTest4";
+
+papTest5 :: ();
+papTest5 = test (==) intToString (apply1 (add 1) 2) 3 "papTest5";
+
+papTest6 :: ();
+papTest6 = test (==) intToString (apply2With2 add 1) 3 "papTest6";
+
+papTest :: ();
+papTest = evalUnitList (Cons papTest1
+                       (Cons papTest2
+                       (Cons papTest3
+                       (Cons papTest4
+                       (Cons papTest5
+                       (Cons papTest6
+                       Nil))))));
+
+-- Arithmetic tests
+
+add3 :: Int -> Int -> Int -> Int;
+add3 x y z = x + y + z;
+
+avg3 :: Int -> Int -> Int -> Int;
+avg3 x y z = (x + y + z) `div` 3;
+
+sub3 :: Int -> Int -> Int -> Int;
+sub3 x y z = (x - y) - z;
+
+sub3' :: Int -> Int -> Int -> Int;
+sub3' x y z = x + (-y) + (-z);
+
+add3Test :: ();
+add3Test = test (==) intToString (add3 (3 * 4) (add3 1 2 (-4 `div` 2)) (10 - 3)) 20 "add3Test";
+
+avg3Test :: ();
+avg3Test = test (==) intToString (avg3 1 2 3) 2 "avg3Test";
+
+sub3Test :: ();
+sub3Test = test (==) intToString (sub3 1 2 3) (-4) "sub3Test";
+
+sub3'Test :: ();
+sub3'Test = test (==) intToString (sub3' 1 2 3) (-4) "sub3'Test";
+
+arithmeticTest :: ();
+arithmeticTest = evalUnitList (Cons add3Test (Cons avg3Test (Cons sub3Test (Cons sub3'Test Nil))));
+
+-- Boolean tests
+
+if'Test1 :: ();
+if'Test1 = test (==) intToString (if' True 1 2) 1 "if'Test1";
+
+if'Test2 :: ();
+if'Test2 = test (==) intToString (if' False 1 2) 2 "if'Test2";
+
+andTest1 :: ();
+andTest1 = test boolEq boolToString (True && True) True "andTest1";
+
+andTest2 :: ();
+andTest2 = test boolEq boolToString (True && False) False "andTest2";
+
+andTest3 :: ();
+andTest3 = test boolEq boolToString ((False && True) && True) False "andTest3";
+
+orTest1 :: ();
+orTest1 = test boolEq boolToString (True || True) True "orTest1";
+
+orTest2 :: ();
+orTest2 = test boolEq boolToString (True || False) True "orTest2";
+
+orTest3 :: ();
+orTest3 = test boolEq boolToString ((False || True) || True) True "orTest3";
+
+notTest1 :: ();
+notTest1 = test boolEq boolToString (not True) False "notTest1";
+
+notTest2 :: ();
+notTest2 = test boolEq boolToString (not (not True)) True "notTest2";
+
+operatorsTest :: ();
+operatorsTest = test boolEq boolToString ((True && True) || (False && False)) True "operatorsTest";
+
+boolTest :: ();
+boolTest = evalUnitList (Cons if'Test1
+                        (Cons if'Test2
+                        (Cons andTest1
+                        (Cons andTest2
+                        (Cons andTest3
+                        (Cons orTest1
+                        (Cons orTest2
+                        (Cons orTest3
+                        (Cons notTest1
+                        (Cons notTest2
+                        (Cons operatorsTest
+                        Nil)))))))))));
+
+-- List tests
+
+intListToString :: List Int -> String;
+intListToString = listToString intToString;
+
+intListEq :: List Int -> List Int -> Bool;
+intListEq = listEq (==);
+
+intListMaybeToString :: Maybe (List Int) -> String;
+intListMaybeToString = maybeToString intListToString;
+
+intListMaybeEq :: Maybe (List Int) -> Maybe (List Int) -> Bool;
+intListMaybeEq = maybeEq intListEq;
+
+pairToString :: (a -> String) -> (b -> String) -> (a, b) -> String;
+pairToString f g (x, y) = "(" ++ (f x) ++ ", " ++ (g y) ++ ")";
+
+pairEq :: (a -> a -> Bool) -> (b -> b -> Bool) -> (a, b) -> (a, b) -> Bool;
+pairEq f g (x, y) (x', y') = (f x x') && (g y y');
+
+intPairToString :: (Int, Int) -> String;
+intPairToString = pairToString intToString intToString;
+
+intPairEq :: (Int, Int) -> (Int, Int) -> Bool;
+intPairEq = pairEq (==) (==);
+
+testList :: List Int;
+testList = Cons 1 (Cons 2 (Cons 3 (Cons 4 (Cons 5 Nil))));
+
+mapTest1 :: ();
+mapTest1 = test intListEq intListToString (map ((+) 2) testList) (Cons 3 (Cons 4 (Cons 5 (Cons 6 (Cons 7 Nil))))) "mapTest1";
+
+mapTest2 :: ();
+mapTest2 = test (listEq boolEq) (listToString boolToString) (map ((<) 3) testList) (Cons False (Cons False (Cons False (Cons True (Cons True Nil))))) "mapTest2";
+
+mapTest3 :: ();
+mapTest3 = test intListEq intListToString (map id Nil) Nil "mapTest3";
+
+filterTest1 :: ();
+filterTest1 = test intListEq intListToString (filter ((<) 3) testList) (Cons 4 (Cons 5 Nil)) "filterTest1";
+
+filterTest2 :: ();
+filterTest2 = test intListEq intListToString (filter odd testList) (Cons 1 (Cons 3 (Cons 5 Nil))) "filterTest2";
+
+filterTest3 :: ();
+filterTest3 = test intListEq intListToString (filter ((>) 0) testList) Nil "filterTest3";
+
+appendTest1 :: ();
+appendTest1 = test intListEq intListToString (testList ++ testList) (Cons 1 (Cons 2 (Cons 3 (Cons 4 (Cons 5 testList))))) "appendTest1";
+
+appendTest2 :: ();
+appendTest2 = test intListEq intListToString (Nil ++ testList) testList "appendTest2";
+
+headTest1 :: ();
+headTest1 = test (maybeEq (==)) (maybeToString intToString) (head testList) (Just 1) "headTest1";
+
+headTest2 :: ();
+headTest2 = test (maybeEq (==)) (maybeToString intToString) (head Nil) Nothing "headTest2";
+
+tailTest1 :: ();
+tailTest1 = test intListMaybeEq intListMaybeToString (tail testList) (Just (Cons 2 (Cons 3 (Cons 4 (Cons 5 Nil))))) "tailTest1";
+
+tailTest2 :: ();
+tailTest2 = test intListMaybeEq intListMaybeToString (tail Nil) Nothing "tailTest2";
+
+lastTest1 :: ();
+lastTest1 = test (maybeEq (==)) (maybeToString intToString) (last testList) (Just 5) "lastTest1";
+
+lastTest2 :: ();
+lastTest2 = test (maybeEq (==)) (maybeToString intToString) (last Nil) Nothing "lastTest2";
+
+initTest1 :: ();
+initTest1 = test intListMaybeEq intListMaybeToString (init testList) (Just (Cons 1 (Cons 2 (Cons 3 (Cons 4 Nil))))) "initTest1";
+
+initTest2 :: ();
+initTest2 = test intListMaybeEq intListMaybeToString (init Nil) Nothing "initTest2";
+
+nullTest1 :: ();
+nullTest1 = test boolEq boolToString (null testList) False "nullTest1";
+
+nullTest2 :: ();
+nullTest2 = test boolEq boolToString (null Nil) True "nullTest2";
+
+lengthTest1 :: ();
+lengthTest1 = test (==) intToString (length testList) 5 "lengthTest1";
+
+lengthTest2 :: ();
+lengthTest2 = test (==) intToString (length Nil) 0 "lengthTest2";
+
+nthTest1 :: ();
+nthTest1 = test (maybeEq (==)) (maybeToString intToString) (testList !! 2) (Just 3) "nthTest1";
+
+nthTest2 :: ();
+nthTest2 = test (maybeEq (==)) (maybeToString intToString) (testList !! 5) Nothing "nthTest2";
+
+nthTest3 :: ();
+nthTest3 = test (maybeEq (==)) (maybeToString intToString) (Nil !! 0) Nothing "nthTest3";
+
+nthTest4 :: ();
+nthTest4 = test (maybeEq (==)) (maybeToString intToString) (testList !! (-1)) Nothing "nthTest4";
+
+reverseTest :: ();
+reverseTest = test intListEq intListToString (reverse testList) (Cons 5 (Cons 4 (Cons 3 (Cons 2 (Cons 1 Nil))))) "reverseTest";
+
+foldrTest1 :: ();
+foldrTest1 = test boolEq boolToString (foldr (&&) True (map ((<) 0) testList)) True "foldrTest1";
+
+foldrTest2 :: ();
+foldrTest2 = test (==) intToString (foldr (+) 0 Nil) 0 "foldrTest2";
+
+foldlTest1 :: ();
+foldlTest1 = test (==) intToString (foldl (+) 0 testList) 15 "foldlTest1";
+
+foldlTest2 :: ();
+foldlTest2 = test (==) intToString (foldl (+) 0 Nil) 0 "foldlTest2";
+
+maximumTest :: ();
+maximumTest = test (maybeEq (==)) (maybeToString intToString) (maximum testList) (Just 5) "maximumTest";
+
+minimumTest :: ();
+minimumTest = test (maybeEq (==)) (maybeToString intToString) (minimum testList) (Just 1) "minimumTest";
+
+--scanrTest1 :: ();
+--scanrTest1 = test intListEq intListToString (scanr (+) 0 testList) (Cons 15 (Cons 14 (Cons 12 (Cons 9 (Cons 5 (Cons 0 Nil)))))) "scanrTest1";
+
+scanrTest2 :: ();
+scanrTest2 = test intListEq intListToString (scanr (+) 0 Nil) (Cons 0 Nil) "scanrTest2";
+
+scanlTest1 :: ();
+scanlTest1 = test intListEq intListToString (scanl (+) 0 testList) (Cons 0 (Cons 1 (Cons 3 (Cons 6 (Cons 10 (Cons 15 Nil)))))) "scanlTest1";
+
+scanlTest2 :: ();
+scanlTest2 = test intListEq intListToString (scanl (+) 0 Nil) (Cons 0 Nil) "scanlTest2";
+
+iterateTest :: ();
+iterateTest = test intListEq intListToString (take 5 (iterate ((+) 2) 1)) (Cons 1 (Cons 3 (Cons 5 (Cons 7 (Cons 9 Nil))))) "iterateTest";
+
+replicateTest :: ();
+replicateTest = test intListEq intListToString (replicate 5 1) (Cons 1 (Cons 1 (Cons 1 (Cons 1 (Cons 1 Nil))))) "replicateTest";
+
+cycleTest :: ();
+cycleTest = test intListEq intListToString (take 6 (cycle testList)) (Cons 1 (Cons 2 (Cons 3 (Cons 4 (Cons 5 (Cons 1 Nil)))))) "cycleTest";
+
+splitAtTest :: ();
+splitAtTest = test (pairEq intListEq intListEq) (pairToString intListToString intListToString) (splitAt 2 testList) (Cons 1 (Cons 2 Nil), Cons 3 (Cons 4 (Cons 5 Nil))) "splitAtTest";
+
+spanTest :: ();
+spanTest = test (pairEq intListEq intListEq) (pairToString intListToString intListToString) (span ((>) 3) testList) (Cons 1 (Cons 2 Nil), Cons 3 (Cons 4 (Cons 5 Nil))) "spanTest";
+
+zipTest1 :: ();
+zipTest1 = test (listEq intPairEq) (listToString intPairToString) (zip testList testList) (Cons (1, 1) (Cons (2, 2) (Cons (3, 3) (Cons (4, 4) (Cons (5, 5) Nil))))) "zipTest1";
+
+zipTest2 :: ();
+zipTest2 = test (listEq intPairEq) (listToString intPairToString) (zip testList (take 2 testList)) (Cons (1, 1) (Cons (2, 2) Nil)) "zipTest2";
+
+zipWithTest1 :: ();
+zipWithTest1 = test intListEq intListToString (zipWith (+) testList testList) (Cons 2 (Cons 4 (Cons 6 (Cons 8 (Cons 10 Nil))))) "zipWithTest1";
+
+zipWithTest2 :: ();
+zipWithTest2 = test intListEq intListToString (zipWith (+) testList (Cons 1 (Cons 2 Nil))) (Cons 2 (Cons 4 Nil)) "zipWithTest2";
+
+unzipTest :: ();
+unzipTest = test (pairEq intListEq intListEq) (pairToString intListToString intListToString) (unzip (zip testList testList)) (testList, testList) "unzipTest";
+
+listTest :: ();
+listTest = evalUnitList (Cons mapTest1
+                        (Cons mapTest2
+                        (Cons mapTest3
+                        (Cons filterTest1
+                        (Cons filterTest2
+                        (Cons filterTest3
+                        (Cons appendTest1
+                        (Cons appendTest2
+                        (Cons headTest1
+                        (Cons headTest2
+                        (Cons tailTest1
+                        (Cons tailTest2
+                        (Cons lastTest1
+                        (Cons lastTest2
+                        (Cons initTest1
+                        (Cons initTest2
+                        (Cons nullTest1
+                        (Cons nullTest2
+                        (Cons lengthTest1
+                        (Cons lengthTest2
+                        (Cons nthTest1
+                        (Cons nthTest2
+                        (Cons nthTest3
+                        (Cons nthTest4
+                        (Cons reverseTest
+                        (Cons foldrTest1
+                        (Cons foldrTest2
+                        (Cons foldlTest1
+                        (Cons foldlTest2
+                        (Cons maximumTest
+                        (Cons minimumTest
+                        --(Cons scanrTest1
+                        (Cons scanrTest2
+                        (Cons scanlTest1
+                        (Cons scanlTest2
+                        (Cons iterateTest
+                        (Cons replicateTest
+                        (Cons cycleTest
+                        (Cons splitAtTest
+                        (Cons spanTest
+                        (Cons zipTest1
+                        (Cons zipTest2
+                        (Cons zipWithTest1
+                        (Cons zipWithTest2
+                        (Cons unzipTest
+                        Nil))))))))))))))))))))))))))))))))))))))))))))--)
+                        ;
+
+-- Maybe tests
+
+isJustTest1 :: ();
+isJustTest1 = test boolEq boolToString (isJust (Just 1)) True "isJustTest1";
+
+isJustTest2 :: ();
+isJustTest2 = test boolEq boolToString (isJust Nothing) False "isJustTest2";
+
+isNothingTest1 :: ();
+isNothingTest1 = test boolEq boolToString (isNothing (Just 1)) False "isNothingTest1";
+
+isNothingTest2 :: ();
+isNothingTest2 = test boolEq boolToString (isNothing Nothing) True "isNothingTest2";
+
+maybeTest1 :: ();
+maybeTest1 = test (==) intToString (maybe 0 ((+) 1) (Just 1)) 2 "maybeTest1";
+
+maybeTest2 :: ();
+maybeTest2 = test (==) intToString (maybe 0 ((+) 1) Nothing) 0 "maybeTest2";
+
+maybeTest :: ();
+maybeTest = evalUnitList (Cons isJustTest1
+                         (Cons isJustTest2
+                         (Cons isNothingTest1
+                         (Cons isNothingTest2
+                         (Cons maybeTest1
+                         (Cons maybeTest2
+                         Nil))))));
+
+-- Either tests
+
+isLeftTest1 :: ();
+isLeftTest1 = test boolEq boolToString (isLeft (Left 1)) True "isLeftTest1";
+
+isLeftTest2 :: ();
+isLeftTest2 = test boolEq boolToString (isLeft (Right 1)) False "isLeftTest2";
+
+isRightTest1 :: ();
+isRightTest1 = test boolEq boolToString (isRight (Left 1)) False "isRightTest1";
+
+isRightTest2 :: ();
+isRightTest2 = test boolEq boolToString (isRight (Right 1)) True "isRightTest2";
+
+eitherTest1 :: ();
+eitherTest1 = test (==) intToString (either ((+) 1) id (Left 1)) 2 "eitherTest1";
+
+eitherTest2 :: ();
+eitherTest2 = test (==) intToString (either ((+) 1) id (Right 1)) 1 "eitherTest2";
+
+eitherTest :: ();
+eitherTest = evalUnitList (Cons isLeftTest1
+                          (Cons isLeftTest2
+                          (Cons isRightTest1
+                          (Cons isRightTest2
+                          (Cons eitherTest1
+                          (Cons eitherTest2
+                          Nil))))));
+
+-- Ratio tests
+
+numeratorTest :: ();
+numeratorTest = test (==) intToString (numerator (1 % 2)) 1 "numeratorTest";
+
+denominatorTest :: ();
+denominatorTest = test (==) intToString (denominator (1 % 2)) 2 "denominatorTest";
+
+ratioFromIntTest :: ();
+ratioFromIntTest = test ratioEq ratioToString (ratioFromInt 2) (2 % 1) "ratioFromIntTest";
+
+addRatioTest :: ();
+addRatioTest = test ratioEq ratioToString (addRatio (1 % 2) (1 % 3)) (5 % 6) "addRatioTest";
+
+mulRatioTest :: ();
+mulRatioTest = test ratioEq ratioToString (mulRatio (1 % 2) (1 % 3)) (1 % 6) "mulRatioTest";
+
+negateRatioTest :: ();
+negateRatioTest = test ratioEq ratioToString (negateRatio (1 % 2)) ((-1) % 2) "negateRatioTest";
+
+subRatioTest :: ();
+subRatioTest = test ratioEq ratioToString (subRatio (1 % 2) (1 % 3)) (1 % 6) "subRatioTest";
+
+recipRatioTest :: ();
+recipRatioTest = test ratioEq ratioToString (recipRatio (1 % 2)) (2 % 1) "recipRatioTest";
+
+divRatioTest :: ();
+divRatioTest = test ratioEq ratioToString (divRatio (1 % 2) (1 % 3)) (3 % 2) "divRatioTest";
+
+evalRatioTest1 :: ();
+evalRatioTest1 = test (==) intToString (evalToInt (1 % 2)) 0 "evalRatioTest1";
+
+evalRatioTest2 :: ();
+evalRatioTest2 = test (==) intToString (evalToInt (mulRatio (addRatio (1 % 2) (1 % 3)) (ratioFromInt 6))) 5 "evalRatioTest2";
+
+ratioTest :: ();
+ratioTest = evalUnitList (Cons numeratorTest
+                         (Cons denominatorTest
+                         (Cons ratioFromIntTest
+                         (Cons addRatioTest
+                         (Cons mulRatioTest
+                         (Cons negateRatioTest
+                         (Cons subRatioTest
+                         (Cons recipRatioTest
+                         (Cons divRatioTest
+                         (Cons evalRatioTest1
+                         (Cons evalRatioTest2
+                         Nil)))))))))));
+
+-- Run all tests
+
+main :: ();
+main = evalUnitList (Cons papTest
+                    (Cons arithmeticTest
+                    (Cons boolTest
+                    (Cons listTest
+                    (Cons maybeTest
+                    (Cons eitherTest
+                    (Cons ratioTest
+                    Nil)))))));

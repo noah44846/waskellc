@@ -6,6 +6,7 @@ pub mod ast_gen;
 pub mod code_gen;
 pub mod validator;
 
+#[derive(Default)]
 pub struct DebugOptions {
     pub debug_lexer: bool,
     pub debug_ast: bool,

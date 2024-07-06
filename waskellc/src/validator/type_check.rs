@@ -467,6 +467,15 @@ fn type_check_expr(
                         }
                         Ok(())
                     }
+                    CaseBranchPattern::Unit => {
+                        if !type_var_assigns.assign_or_check(input_ty, &Type::Unit) {
+                            return Err(format!(
+                                "Unit pattern has type {:?} but input has type {:?}",
+                                pattern, input_ty
+                            ));
+                        }
+                        Ok(())
+                    }
                     CaseBranchPattern::Wildcard => Ok(()),
                     CaseBranchPattern::IntLiteral(_) => {
                         if !type_var_assigns.assign_or_check(input_ty, &Type::Int) {
@@ -490,7 +499,7 @@ fn type_check_expr(
                             ));
                         }
 
-                        if fields.len() != symbol.arity().into() {
+                        if fields.len() != symbol.arity() as usize {
                             return Err(format!(
                                 "Data constructor {} has {} fields but pattern has {}",
                                 symbol.name,

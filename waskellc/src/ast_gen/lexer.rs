@@ -41,7 +41,7 @@ pub enum Token {
     #[regex(r"\d+", |lex| lex.slice().parse::<i32>().unwrap())]
     Integer(i32),
 
-    #[regex(r#"'.*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
+    #[regex(r#"'[^']*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
     Char(char),
 
     #[regex(r#""[^"]*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_owned())]
