@@ -4,6 +4,10 @@ use logos::Logos;
 
 use crate::ast_gen::lexer::{Token, TokenIter};
 
+/// Helper function to get the next token from the iterator and return it as a `Token` or an error.
+///
+/// If `peek` is `true`, the function will not consume the token from the iterator. If the lexer
+/// has reached the end of the input or the character is invalid, an error will be returned.
 fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
     let next = if peek {
         iter.peek().cloned()
@@ -16,10 +20,12 @@ fn next_token(iter: &mut TokenIter, peek: bool) -> Result<Token, String> {
     }
 }
 
+/// Represents a list of top-level declarations in a Haskell module.
 #[derive(Debug)]
 pub struct TopDeclarations(pub Vec<TopDeclaration>);
 
 impl TopDeclarations {
+    /// Parse a list of top-level declarations from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let mut top_declarations = vec![];
         loop {
@@ -46,30 +52,44 @@ impl TopDeclarations {
     }
 }
 
+/// Represents the foreign import/export annotations for a function type signature.
 #[derive(Debug, PartialEq, Clone)]
 pub enum IsForeign {
+    /// The function is imported from the WASM library.
     LibImported,
+    /// The function is imported from a foreign module.
     ForeignImported,
+    /// The function is exported in the WASM module.
     Exported,
+    /// The function is exported but the parameters and return value are unevaluated.
     UnevaluatedExported,
+    /// The function is not foreign.
     NotForeign,
 }
 
+/// Represents a top-level declaration in a Haskell module.
 #[derive(Debug)]
 pub enum TopDeclaration {
     //TypeDecl(TypeDeclaration),
     //NewTypeDecl(NewTypeDeclaration),
     //FixityDecl(FixityDeclaration),
+    /// Represents a data declaration in a Haskell module.
     DataDecl(DataDeclaration),
+    /// Represents a type signature or function declaration in a Haskell module.
     TypeSig {
+        /// name of the function
         name: String,
+        /// type signature of the function
         ty: FunctionType,
+        /// foreign import/export annotation
         is_foreign: IsForeign,
     },
+    /// Represents a function declaration in a Haskell module.
     FunctionDecl(FunctionDeclaration),
 }
 
 impl TopDeclaration {
+    /// Parse a top-level declaration from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let token = next_token(input, true)?;
         match token {
@@ -170,6 +190,8 @@ impl TopDeclaration {
         }
     }
 
+    /// Parse a type signature or function declaration from the input token iterator. Can be called
+    /// after the `foreign` keyword or as a standalone function declaration.
     fn parse_type_sig_or_decl(input: &mut TokenIter, from_foreign: bool) -> Result<Self, String> {
         let func_name = match next_token(input, false)? {
             // TODO: support (&*) as variables
@@ -207,10 +229,12 @@ impl TopDeclaration {
     }
 }
 
+/// Represents a type that can be a function type (e.g. `Int -> Int`, a function that takes an `Int` and returns an `Int`) or a simple type (e.g. `Int`).
 #[derive(Debug, Clone)]
 pub struct FunctionType(pub Vec<Type>);
 
 impl FunctionType {
+    /// Parse a function type signature from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let mut types = vec![];
         loop {
@@ -230,10 +254,12 @@ impl FunctionType {
     }
 }
 
+/// Represents a type application. It can be a simple type (e.g. `Int`) or a type constructor (e.g. `Maybe Int`).
 #[derive(Debug, Clone)]
 pub struct Type(pub Vec<TypeApplicationElement>);
 
 impl Type {
+    /// Parse a type signature from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let mut types = vec![];
         loop {
@@ -255,20 +281,28 @@ impl Type {
     }
 }
 
+/// Represents a type application element.
 #[derive(Debug, Clone)]
 pub enum TypeApplicationElement {
+    /// Represents a unit type.
     Unit,
     //ListConstructor,
+    /// Represents an unapplied tuple constructor.
     TupleConstructor(i32),
     //FunctionConstructor,
     //ListType(Box<FunctionType>),
+    /// Represents a tuple type.
     TupleType(Vec<FunctionType>),
+    /// Represents a type variable.
     TypeVariable(String),
+    /// Represents a parenthesized type (e.g. if an element of the type signature is a function type).
     ParenthesizedType(Box<FunctionType>),
+    /// Represents a type constructor for a custom type (e.g. `Maybe`).
     TypeConstructor(String),
 }
 
 impl TypeApplicationElement {
+    /// Parse a type application element from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, false)? {
             Token::ConstructorIdent(ident) => Ok(TypeApplicationElement::TypeConstructor(ident)),
@@ -325,40 +359,25 @@ impl TypeApplicationElement {
                     }
                 }
             }
-            Token::Special('[') => {
-                todo!();
-                //input.next();  consume the '['
-
-                //if let Token::Special(']') = next_token(input, true)? {
-                //input.next();  consume the ']'
-                //return Ok(TypeApplicationElement::ListConstructor);
-                //}
-
-                //let elem = Box::new(FunctionType::parse(input)?);
-                //let next = next_token(input, false)?;
-                //if matches!(next, Token::Special(']')) {
-                //input.next();  consume the ']'
-                //return Ok(TypeApplicationElement::ListType(elem));
-                //} else {
-                //return Err(format!(
-                //"Expected ']' after type in list type, got {:?}",
-                //next
-                //));
-                //}
-            }
+            Token::Special('[') => todo!(),
             t => todo!("Type parsing for lists and type variables: {:?}", t),
         }
     }
 }
 
+/// Represents a data declaration in a Haskell module.
 #[derive(Debug)]
 pub struct DataDeclaration {
+    /// The name of the type constructor for the data declaration.
     pub ty_constructor: String,
+    /// The type variables for the data declaration (can be empty if the data declaration is a simple type).
     pub ty_vars: Vec<String>,
+    /// The data constructors for the data declaration.
     pub data_constructors: Vec<DataConstructor>,
 }
 
 impl DataDeclaration {
+    /// Parse a data declaration from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let name = match next_token(input, false)? {
             Token::ConstructorIdent(ident) => ident,
@@ -417,13 +436,17 @@ impl DataDeclaration {
     }
 }
 
+/// Represents a data constructor in a Haskell module.
 #[derive(Debug)]
 pub struct DataConstructor {
+    /// The name of the data constructor.
     pub name: String,
+    /// The fields of the data constructor.
     pub fields: Vec<TypeApplicationElement>,
 }
 
 impl DataConstructor {
+    /// Parse a data constructor from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         let name = match next_token(input, false)? {
             Token::ConstructorIdent(ident) => ident,
@@ -448,19 +471,19 @@ impl DataConstructor {
     }
 }
 
+/// Represents a function declaration in a Haskell module.
 #[derive(Debug)]
 pub struct FunctionDeclaration {
-    // TODO: operator definitions
-    // TODO: where clauses
-    // TODO: guards
+    /// The name of the function.
     pub name: String,
+    /// The pattern matching for the function left-hand side.
     pub lhs: Vec<FunctionParameterPattern>,
+    /// The right-hand side expression for the function.
     pub rhs: Expression,
-    //pub guards: Vec<Guard>,
 }
 
 impl FunctionDeclaration {
-    // TODO: definition of operators would be here: parse "pat varop pat"
+    /// Parse a function declaration from the input token iterator.
     fn parse(name: String, input: &mut TokenIter) -> Result<Self, String> {
         let mut lhs = vec![];
         let next = next_token(input, true)?;
@@ -489,23 +512,36 @@ impl FunctionDeclaration {
     }
 }
 
+/// Represents a pattern for a function parameter in a function declaration.
 #[derive(Debug, Clone)]
 pub enum FunctionParameterPattern {
+    /// Represents a variable pattern. It can be an `as` pattern (e.g. `x@p`) or a simple variable
     AsPattern(String, Option<Box<FunctionParameterPattern>>),
+    /// Represents a constructor pattern. In this case its matching against a data constructor
+    /// without any fields.
     ConstructorPattern(String),
+    /// Represents a unit pattern. It matches against the unit type `()`.
     UnitPattern,
+    /// Represents an empty tuple pattern. It matches against a tuple with no elements.
     EmptyTuplePattern(i32),
     //EmptyListPattern,
+    /// Represents a string literal pattern.
     StringLiteral(String),
+    /// Represents an integer literal pattern.
     IntegerLiteral(i32),
+    /// Represents a character literal pattern.
     CharLiteral(char),
+    /// Represents a wildcard pattern. It matches against any value.
     Wildcard,
+    /// Represents a parenthesized pattern. It is required for more complex patterns.
     ParenthesizedPattern(Box<Pattern>),
+    /// Represents a tuple pattern. It matches against a tuple with one or more elements.
     TuplePattern(Vec<Pattern>),
     //ListPattern(Vec<Pattern>),
 }
 
 impl FunctionParameterPattern {
+    /// Parse a function parameter pattern from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         use FunctionParameterPattern::*;
 
@@ -570,30 +606,7 @@ impl FunctionParameterPattern {
                     }
                 }
             }
-            Token::Special('[') => {
-                todo!();
-                //input.next(); // consume the '['
-
-                //if let Token::Special(']') = next_token(input, true)? {
-                //input.next(); // consume the ']'
-                //return Ok(EmptyListPattern);
-                //}
-
-                //let mut types = vec![];
-                //loop {
-                //types.push(Pattern::parse(input)?);
-                //match next_token(input, false)? {
-                //Token::Special(',') => {}
-                //Token::Special(']') => {
-                //return Ok(FunctionParameterPattern::ListPattern(types));
-                //}
-                //t => Err(format!(
-                //"Expected ',' or ']' after pattern in list pattern, got {:?}",
-                //t,
-                //))?,
-                //}
-                //}
-            }
+            Token::Special('[') => todo!(),
             Token::Integer(i) => Ok(IntegerLiteral(i)),
             Token::Char(c) => Ok(CharLiteral(c)),
             Token::String(s) => Ok(StringLiteral(s)),
@@ -603,15 +616,20 @@ impl FunctionParameterPattern {
     }
 }
 
+/// Represents a more general pattern for negated integer literals and data constructors with fields.
 #[derive(Debug, Clone)]
 pub enum Pattern {
+    /// Represents a function parameter pattern.
     FunctionParameterPattern(FunctionParameterPattern),
+    /// Represents a constructor pattern. It matches against a data constructor with fields.
     ConstructorPattern(String, Vec<FunctionParameterPattern>),
+    /// Represents a negated integer literal pattern.
     NegatedIntegerLiteral(i32),
     //InfixConstructorPattern(String, Box<Pattern>, Box<Pattern>),
 }
 
 impl Pattern {
+    /// Parse a pattern from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, true)? {
             Token::ConstructorIdent(ident) => {
@@ -650,14 +668,20 @@ impl Pattern {
     }
 }
 
+/// Represents a top level expression in a Haskell module.
 #[derive(Debug)]
 pub enum Expression {
+    /// Represents an infixed application of an operator to two expressions (an operator can be a
+    /// variable identifier with backticks: ``a `op` b`` or variable symbols: `a + b`).
     InfixedApplication(Box<LeftHandSideExpression>, String, Box<Expression>),
+    /// Represents a negated expression (e.g. `-a`).
     NegatedExpr(Box<Expression>),
+    /// Represents a left-hand side expression.
     LeftHandSideExpression(Box<LeftHandSideExpression>),
 }
 
 impl Expression {
+    /// Parse an expression from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, true)? {
             Token::VariableSym(sym) if sym == "-" => {
@@ -708,8 +732,12 @@ impl Expression {
     }
 }
 
+/// Represents a left-hand side expression in a Haskell module (in this case left-hand side means
+/// either the left-hand side of a infix expression or just an expression that can't be represented
+/// in the [`Expression`] enum).
 #[derive(Debug)]
 pub enum LeftHandSideExpression {
+    /// Represents a function application.
     FunctionApplication(Vec<FunctionParameterExpression>),
     //LambdaExpr(Vec<Pattern>, Box<Expression>),
     //LetExpr(Vec<Declarations>, Box<Expression>), // make a group of function decls and type sigs under
@@ -719,6 +747,7 @@ pub enum LeftHandSideExpression {
 }
 
 impl LeftHandSideExpression {
+    /// Parse a left-hand side expression from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, true)? {
             Token::ReservedIdent(ident) => match ident.as_str() {
@@ -767,17 +796,27 @@ impl LeftHandSideExpression {
     }
 }
 
+/// Represents a parameter of a function application in a Haskell module.
 #[derive(Debug)]
 pub enum FunctionParameterExpression {
+    /// Represents a string literal.
     StringLiteral(String),
+    /// Represents an integer literal.
     IntegerLiteral(i32),
+    /// Represents a character literal.
     CharLiteral(char),
+    /// Represents a variable.
     Variable(String),
+    /// Represents a constructor.
     Constructor(String),
     //EmptyList,
+    /// Represents an empty tuple.
     EmptyTuple(i32),
+    /// Represents a unit value.
     Unit,
+    /// Represents a parenthesized expression.
     ParenthesizedExpr(Box<Expression>),
+    /// Represents a tuple expression.
     TupleExpr(Vec<Expression>),
     //ListExpr(Vec<Expression>),
     //ArithmeticSequence(Box<Expression>, Option<Box<Expression>>, Option<Box<Expression>>),
@@ -787,6 +826,7 @@ pub enum FunctionParameterExpression {
 }
 
 impl FunctionParameterExpression {
+    /// Parse a function parameter expression from the input token iterator.
     fn parse(input: &mut TokenIter) -> Result<Self, String> {
         match next_token(input, false)? {
             Token::VariableIdent(ident) => Ok(FunctionParameterExpression::Variable(ident)),
@@ -856,6 +896,9 @@ impl FunctionParameterExpression {
     }
 }
 
+/// Parse the input string and return the list of top-level declarations or an error message.
+///
+/// Prints the tokens and the AST if the `debug_lexer` and `debug_ast` flags are set to `true`.
 pub fn parse(input: &str, debug_lexer: bool, debug_ast: bool) -> Result<TopDeclarations, String> {
     if debug_lexer {
         println!("Tokens: {:#?}", Token::lexer(input).collect::<Vec<_>>());

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+//! Main entry point for the Waskell compiler
+
 use std::{fs, path::PathBuf, process::Command};
 
 use anyhow::anyhow;
@@ -7,17 +9,23 @@ use clap::Parser;
 
 use waskellc::{compile, DebugOptions};
 
+/// Default path to wasm lib file
 const DEFAULT_WASM_LIB_PATH: &str = "lib/lib.wasm";
+/// Default path to prelude file
 const DEFAULT_PRELUDE_PATH: &str = "lib/prelude.wsk";
 
+/// CLI arguments struct
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// Path to input file
     input: PathBuf,
 
+    /// Path to output file
     #[arg(short, long, default_value = None)]
     output: Option<PathBuf>,
 
+    /// Path to wasm lib file (default: lib/lib.wasm)
     #[arg(
         short = 'l',
         long,
@@ -26,6 +34,7 @@ struct Args {
     )]
     wasm_lib_path: PathBuf,
 
+    /// Path to prelude file (default: lib/prelude.wsk)
     #[arg(
         short = 'p',
         long,
@@ -34,18 +43,23 @@ struct Args {
     )]
     prelude_path: PathBuf,
 
+    /// Debug mode
     #[arg(short = 'd', long)]
     debug: bool,
 
+    /// Debug option: Print lexer output
     #[arg(requires("debug"), short = 'L', long, help = "Print lexer output")]
     debug_lexer: bool,
 
+    /// Debug option: Print AST
     #[arg(requires("debug"), short = 'A', long, help = "Print AST")]
     debug_ast: bool,
 
+    /// Debug option: Print symbol table
     #[arg(requires("debug"), short = 'S', long, help = "Print symbol table")]
     debug_symbols: bool,
 
+    /// Debug option: Print desugared symbol table
     #[arg(
         requires("debug"),
         short = 'D',
@@ -54,6 +68,7 @@ struct Args {
     )]
     debug_desugar: bool,
 
+    /// Debug option: Print WAT output of wasm module
     #[arg(
         requires("debug"),
         short = 'W',
@@ -62,6 +77,7 @@ struct Args {
     )]
     debug_wasm: bool,
 
+    /// Debug option: Show offsets in WAT output
     #[arg(
         requires("debug_wasm"),
         short = 's',
@@ -71,16 +87,21 @@ struct Args {
     )]
     show_wasm_offsets: bool,
 
+    /// Do not merge wasm module with wasm lib
     #[arg(long, default_value = "false")]
     no_merge: bool,
 }
 
+/// Get output path from input path by changing extension to wasm
 fn out_path(in_path: PathBuf) -> PathBuf {
     let mut out_path = in_path;
     out_path.set_extension("wasm");
     out_path
 }
 
+/// Run wasm-merge command to merge wasm module with wasm lib.
+/// Takes output path and wasm lib path as arguments.
+/// Works on Windows x86_64, Linux x86_64, MacOS x86_64 and MacOS arm64.
 fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), anyhow::Error> {
     let mut cmd;
 
@@ -115,6 +136,7 @@ fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), anyhow
     }
 }
 
+/// Main entry point
 fn main() {
     let args = Args::parse();
 
@@ -166,6 +188,7 @@ mod tests {
     const DEFAULT_PRELUDE_PATH: &str = "lib/prelude.wsk";
     const DEFAULT_PRELUDE_TEST: &str = include_str!("../examples/prelude_test.wsk");
 
+    /// Compile and run prelude test
     #[test]
     fn test_prelude() -> Result<()> {
         let prelude_contents = fs::read_to_string(DEFAULT_PRELUDE_PATH).unwrap();

@@ -13,22 +13,37 @@ use crate::validator::type_check::flatten_function_ty;
 
 use super::type_check::type_check_syms;
 
+/// A type alias for the symbol table.
 pub type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
+/// A type alias for the type constructor table.
 type TypeConstructorTable = HashMap<String, Rc<RefCell<TypeConstructor>>>;
 
+/// A struct representing a symbol in the symbol table.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Symbol {
+    /// The name of the symbol.
     pub name: String,
+    /// The type of the symbol.
     pub ty: Type,
+    /// The expression of the symbol. This can be `None` if the symbol is a data constructor for
+    /// example.
     pub expr: Option<Expression>,
+    /// The index of the data constructor in the type constructor. This can be `None` if the symbol
+    /// is not a data constructor.
     pub data_constructor_idx: Option<usize>,
+    /// The foreign annotations of the symbol.
     pub is_foreign: ast_gen::IsForeign,
 }
 
+/// A struct representing a type constructor in the type constructor table.
 #[derive(PartialEq, Clone)]
 struct TypeConstructor {
+    /// The name of the type constructor.
     pub name: String,
+    /// The type variables of the type constructor. Each type variable is a tuple of the type
+    /// variable name and the type constructor name.
     pub type_vars: Vec<(String, String)>,
+    /// The data constructors of the type constructor as a vector of symbols.
     pub data_constructors: Vec<Rc<RefCell<Symbol>>>,
 }
 
@@ -74,6 +89,7 @@ impl Hash for TypeConstructor {
 impl Eq for TypeConstructor {}
 
 impl Symbol {
+    /// Returns the type of the symbol at the given index if the symbol is a function.
     pub fn param_type(&self, i: usize) -> Option<&Type> {
         match self.ty {
             // lase argument is the return type
@@ -82,6 +98,8 @@ impl Symbol {
         }
     }
 
+    /// Returns the return type of the symbol if the symbol is a function or the type of the symbol
+    /// otherwise.
     pub fn return_type(&self) -> Option<&Type> {
         match self.ty {
             Type::Function(ref params) => params.last(),
@@ -89,6 +107,8 @@ impl Symbol {
         }
     }
 
+    /// Returns the arity of the symbol if the symbol is a function (i.e. the number of parameters)
+    /// and 0 otherwise.
     pub fn arity(&self) -> u8 {
         match self.ty {
             Type::Function(ref params) => (params.len() - 1) as u8,
@@ -96,6 +116,7 @@ impl Symbol {
         }
     }
 
+    /// Returns whether the symbol is imported from a foreign module or form the WASM library.
     pub fn is_imported(&self) -> bool {
         matches!(
             self.is_foreign,
@@ -103,6 +124,7 @@ impl Symbol {
         )
     }
 
+    /// Returns whether the symbol is exported.
     pub fn is_exported(&self) -> bool {
         matches!(
             self.is_foreign,
@@ -110,10 +132,16 @@ impl Symbol {
         )
     }
 
+    /// Returns whether the symbol is an unevaluated export.
     pub fn is_unevaluated_export(&self) -> bool {
         matches!(self.is_foreign, ast_gen::IsForeign::UnevaluatedExported)
     }
 
+    /// Returns the name of the module from which the symbol is imported if the symbol is imported
+    /// and `None` otherwise.
+    ///
+    /// If the symbol is imported from a foreign module, the name of the module is `"foreign"`.
+    /// If the symbol is imported from the WASM library, the name of the module is `"lib"`.
     pub fn import_module_name(&self) -> Option<&'static str> {
         match self.is_foreign {
             ast_gen::IsForeign::ForeignImported => Some("foreign"),
@@ -123,61 +151,104 @@ impl Symbol {
     }
 }
 
+/// An enum representing a type in the symbol table.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Type {
+    /// The `Int` type.
     Int,
+    /// The `Char` type.
     Char,
+    /// The function type with a vector of types. The last type is the return type.
     Function(Vec<Type>),
+    /// The `List` type with the type of the elements.
     List(Box<Type>),
+    /// The `Tuple` type with a vector of types.
     Tuple(Vec<Type>),
+    /// The `Unit` type.
     Unit,
+    /// The type variable with the name of the variable and the name of the symbol in which the
+    /// variable is defined.
     TypeVar {
+        /// The name of the type variable.
         var_name: String,
+        /// The name of the symbol in which the type variable is defined.
         ctx_symbol_name: String,
     },
+    /// The custom type with the name of the type constructor and a vector of types.
     CustomType(String, Vec<Type>),
 }
 
+/// An enum representing an expression in the symbol table.
 #[derive(PartialEq, Clone)]
 pub enum Expression {
+    /// The integer literal expression.
     IntLiteral(i32),
+    /// The string literal expression.
     StringLiteral(String),
+    /// The character literal expression.
     CharLiteral(char),
+    /// The unit value expression.
     UnitValue,
+    /// The symbol expression with a reference to the symbol in the symbol table.
     Symbol(Rc<RefCell<Symbol>>),
+    /// The scope symbol expression with the name of the symbol. This is used for lambda
+    /// abstractions and symbols defined in case expressions.
     ScopeSymbol(String),
+    /// The function application expression with a vector of expressions and a boolean indicating
+    /// whether the function is partially applied.
     FunctionApplication {
+        /// The vector of expressions.
         params: Vec<Expression>,
+        /// The boolean indicating whether the function is partially applied.
         is_partial: bool,
     },
+    /// The tuple expression with a vector of expressions.
     Tuple(Vec<Expression>),
+    /// The lambda abstraction expression with a vector of parameter names and an expression.
     LambdaAbstraction(Vec<String>, Box<Expression>),
+    /// The case expression with a [`CaseExpression`].
     CaseExpression(CaseExpression),
 }
 
+/// A struct representing a case expression in the symbol table.
 #[derive(Debug, PartialEq, Clone)]
 pub struct CaseExpression {
+    /// The input expression of the case expression.
     pub input_expr: Box<Expression>,
+    /// The type of the input expression.
     pub input_ty: Box<Type>,
+    /// The branches of the case expression.
     pub branches: Vec<CaseBranch>,
 }
 
+/// A struct representing a case branch in the symbol table.
 #[derive(Debug, PartialEq, Clone)]
 pub struct CaseBranch {
+    /// The pattern of the case branch.
     pub pattern: CaseBranchPattern,
+    /// The expression of the case branch.
     pub branch_expr: Expression,
 }
 
+/// An enum representing a case branch pattern in the symbol table.
 #[derive(PartialEq, Clone)]
 pub enum CaseBranchPattern {
+    /// The integer literal pattern.
     IntLiteral(i32),
+    /// The as pattern with the name of the parameter and an optional pattern.
     AsPattern(String, Option<Box<CaseBranchPattern>>),
+    /// The constructor pattern with the data constructor and a vector of patterns.
     Constructor {
+        /// A reference to the data constructor in the symbol table.
         data_constructor: Rc<RefCell<Symbol>>,
+        /// The vector of patterns for the fields of the data constructor.
         fields: Vec<CaseBranchPattern>,
     },
+    /// The tuple pattern with a vector of patterns.
     Tuple(Vec<CaseBranchPattern>),
+    /// The unit pattern.
     Unit,
+    /// The wildcard pattern.
     Wildcard,
 }
 
@@ -260,6 +331,10 @@ impl fmt::Debug for Expression {
     }
 }
 
+/// Converts a data declaration to a symbol in the symbol table.
+///
+/// Returns an error if the type constructor or data constructor already exists or if a type
+/// variable used in a data constructor is not found in the type constructor.
 fn data_decl_to_symbol(
     data_decl: &ast_gen::DataDeclaration,
     symbol_table: &mut SymbolTable,
@@ -372,6 +447,9 @@ fn data_decl_to_symbol(
     Ok(())
 }
 
+/// Creates a symbol from a function type and adds it to the symbol table.
+///
+/// Returns an error if the symbol already exists.
 fn function_type_to_symbol(
     name: String,
     func_ty: &ast_gen::FunctionType,
@@ -398,6 +476,7 @@ fn function_type_to_symbol(
     Ok(())
 }
 
+/// Converts a function type from the AST to a type for the symbol table.
 fn parser_func_type_to_type(
     type_constructor_table: &mut TypeConstructorTable,
     func_ty: &ast_gen::FunctionType,
@@ -416,6 +495,10 @@ fn parser_func_type_to_type(
     }
 }
 
+/// Converts a type from the AST to a type for the symbol table.
+///
+/// Returns an error if the type constructor is not found.
+/// Returns an error if a type application is expected but not enough type arguments are provided.
 fn parser_type_to_type(
     type_constructor_table: &mut TypeConstructorTable,
     parser_type: &ast_gen::Type,
@@ -486,6 +569,10 @@ fn parser_type_to_type(
     Ok(ty)
 }
 
+/// Adds a function declaration to the already existing symbol in the symbol table.
+///
+/// Returns an error if the symbol is not found (it should have been added before while adding the
+/// type signature).
 fn add_function_decl_to_symbol(
     func_decls: Vec<&ast_gen::FunctionDeclaration>,
     symbol_table: &mut SymbolTable,
@@ -497,7 +584,7 @@ fn add_function_decl_to_symbol(
         .ok_or(format!("Function type signature for {} not found", name))?;
     let symbol = symbol.clone();
 
-    if let Some(sym_names) = get_param_names_form_non_case_decl(&func_decls) {
+    if let Some(sym_names) = get_param_names_from_non_case_decl(&func_decls) {
         let expr = if sym_names.is_empty() {
             parser_expr_to_expr(&func_decls[0].rhs, &[], symbol_table)?
         } else {
@@ -588,7 +675,9 @@ fn add_function_decl_to_symbol(
     Ok(())
 }
 
-fn get_param_names_form_non_case_decl(
+/// Returns a vector of parameter names for a function declaration that doesn't have multiple
+/// branches.
+fn get_param_names_from_non_case_decl(
     func_decls: &[&ast_gen::FunctionDeclaration],
 ) -> Option<Vec<String>> {
     if func_decls.len() == 1 {
@@ -609,6 +698,9 @@ fn get_param_names_form_non_case_decl(
     None
 }
 
+/// Parses a case pattern from the AST.
+///
+/// Returns an error if the pattern is invalid (e.g. ConstructorPattern with too many fields).
 fn parser_pattern_to_branch_pattern(
     pattern: &ast_gen::FunctionParameterPattern,
     scope: &mut HashSet<String>,
@@ -709,6 +801,7 @@ fn parser_pattern_to_branch_pattern(
     }
 }
 
+/// Parses an expression from the AST.
 fn parser_expr_to_expr(
     parser_expr: &ast_gen::Expression,
     scope: &[String],
@@ -742,6 +835,7 @@ fn parser_expr_to_expr(
     }
 }
 
+/// Parses a left-hand side expression from the AST.
 fn parser_lhs_expr_to_expr(
     lhs_expr: &ast_gen::LeftHandSideExpression,
     scope: &[String],
@@ -773,6 +867,9 @@ fn parser_lhs_expr_to_expr(
     }
 }
 
+/// Parses a function parameter expression from the AST.
+///
+/// Returns an error if a symbol used in an expression is not found.
 fn parser_fn_param_expr_to_expr(
     fn_arg_expr: &ast_gen::FunctionParameterExpression,
     scope: &[String],
@@ -864,6 +961,10 @@ fn parser_fn_param_expr_to_expr(
     }
 }
 
+/// Validates the AST and returns the symbol table.
+///
+/// If `debug_symbols` is `true`, the symbol table is printed.
+/// If `debug_desugar` is `true`, the desugared symbol table is printed.
 pub fn validate(
     ast: ast_gen::TopDeclarations,
     debug_symbols: bool,

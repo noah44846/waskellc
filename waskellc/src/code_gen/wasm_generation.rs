@@ -10,15 +10,26 @@ use crate::code_gen::encoder_wrapper::{
     DeclaredWasmFunctionTypes, DeclaredWasmFunctions, DeclaredWasmImports, WasmFunctionLocals,
 };
 
+/// A struct that is used to generate the WebAssembly code from the validated AST.
 struct CodeGen {
+    /// The code section of the WebAssembly module.
     code_section: CodeSection,
+    /// The function types declared in the WebAssembly module.
     function_types: DeclaredWasmFunctionTypes,
+    /// The imports declared in the WebAssembly module.
     imports: Option<DeclaredWasmImports>,
+    /// The functions declared in the WebAssembly module.
     functions: Option<DeclaredWasmFunctions>,
+    /// The symbol table.
     symbol_table: Rc<validator::SymbolTable>,
 }
 
 impl CodeGen {
+    /// Generates the WebAssembly code from the validated AST. The generated code is then validated
+    /// using the `wasmparser` crate.
+    ///
+    /// If `print_wasm` is true the generated WebAssembly code is printed to the terminal. If
+    /// `show_offset` is true the offsets of the instructions are printed to the terminal.
     fn generate(
         symbol_table: validator::SymbolTable,
         print_wasm: bool,
@@ -57,6 +68,12 @@ impl CodeGen {
         Ok(wasm_bytes)
     }
 
+    /// Handles the imports of foreign functions and the helper functions that are imported from
+    /// the lib module.
+    ///
+    /// It generates the function types for the foreign functions and the helper functions. The
+    /// foreign functions also get a wrapper so that it can easily be used by other functions.
+    /// Finally converts the [`DeclaredWasmImports`] into [`DeclaredWasmFunctions`].
     fn handle_imports(&mut self) -> Result<(), String> {
         let imports = self.imports.as_mut().unwrap();
 
@@ -142,6 +159,12 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates the functions from the symbol table.
+    ///
+    /// First it generates the code for the data constructors. Then it generates the function
+    /// signatures for all the functions in the symbol table. Then it generates the function bodies
+    /// for all the functions in the symbol table. Finally it generates the apply function and
+    /// returns the WebAssembly module.
     fn generate_functions(mut self) -> Result<Module, String> {
         let symbol_table = self.symbol_table.clone();
         let symbols = symbol_table
@@ -186,6 +209,12 @@ impl CodeGen {
         Ok(module)
     }
 
+    /// Creates or gets the function type index for a given symbol.
+    ///
+    /// The `remove_return_when_unit` parameter is used to remove the return type when the function
+    /// returns a unit type. This is used for the exported functions but for waskell functions the
+    /// return type is always an integer since we need to return the thunk that will be evaluated
+    /// at a later time.
     fn func_ty_idx_from_symbol(
         &mut self,
         symbol: &validator::Symbol,
@@ -223,6 +252,10 @@ impl CodeGen {
             .unwrap())
     }
 
+    /// Generates the function type index for a given symbol and exports it if applicable.
+    ///
+    /// If the symbol is a foreign export a separate function, prefixed with `:export_` is created
+    /// (possibly with a different return type) and exported.
     fn create_signature(&mut self, symbol: &validator::Symbol) -> Result<(), String> {
         let func_type = self.func_ty_idx_from_symbol(symbol, false)?;
 
@@ -256,6 +289,9 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates a data constructor from a symbol.
+    ///
+    /// Return an error if the function already exists in the function table.
     fn generate_data_constructors(&mut self, symbol: &validator::Symbol) -> Result<(), String> {
         let mut instrs = vec![];
         let functions = self.functions.as_mut().unwrap();
@@ -326,6 +362,7 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates the code for a function.
     fn generate_function_body(&mut self, symbol: &validator::Symbol) -> Result<(), String> {
         let mut locals = WasmFunctionLocals::new(symbol.arity() as u32);
         let mut instrs = vec![];
@@ -365,6 +402,11 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates a wrapper function for a foreign export.
+    ///
+    /// The wrapper function will call the foreign export and then call the `:full_eval` function
+    /// to evaluate the result. The result is then wrapped in a thunk and returned if the return
+    /// type is not a unit.
     fn generate_instructions_from_exported(
         &mut self,
         sym: &validator::Symbol,
@@ -431,6 +473,11 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates a wrapper function for a foreign import.
+    ///
+    /// The wrapper function will call wrap all the parameters using the `:make_val` function and
+    /// then call the foreign import. The result is then wrapped and returned if the
+    /// return type is not a unit.
     fn generate_foreign_import_wrapper(&mut self, sym: &validator::Symbol) -> Result<(), String> {
         let mut instrs = vec![];
         let func_name = format!(":imported_{}", &sym.name);
@@ -488,6 +535,10 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates the code for a top level expression.
+    ///
+    /// If the top level expression is a lambda abstraction the parameters are added to a scope and
+    /// passed to the [`generate_instructions_for_expr`] function.
     fn generate_instructions_from_top_level_expr(
         &mut self,
         expr: &validator::Expression,
@@ -594,6 +645,12 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Generates the code for an expression.
+    ///
+    /// It returns the local index of where the result of the expression is stored.
+    ///
+    /// It takes a context which is a list of symbols that are in scope and their index in the
+    /// locals.
     fn generate_instructions_for_expr(
         &mut self,
         context: &[(u32, &str)],
@@ -823,7 +880,7 @@ impl CodeGen {
         }
     }
 
-    /// Returns if the input expression has been evaluated
+    /// Generates the code for a case branch pattern.
     fn generate_instructions_for_case_branch<'a>(
         &mut self,
         input_local_idx: u32,
@@ -987,6 +1044,13 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Function that generates the code for creating a environment for a thunk or partial
+    /// application (PAP).
+    ///
+    /// The environment is created by calling the `:make_env` function. The environment is then
+    /// stored in the local variable at `local_idx` and the parameters are stored in the
+    /// environment. The first element in the environment is the function table index if present
+    /// (for thunks) and the rest of the elements are the parameters.
     fn make_env_wrapper(
         &mut self,
         context: &[(u32, &str)],
@@ -1034,6 +1098,8 @@ impl CodeGen {
         Ok(())
     }
 
+    /// Function that generates the code for creating a thunk from a function application where the
+    /// function is a symbol.
     fn make_thunk_from_symbol(
         &mut self,
         instrs: &mut Vec<Instruction>,
@@ -1088,6 +1154,12 @@ impl CodeGen {
         Ok(local_idx)
     }
 
+    /// Function that generates the code for creating a thunk from a function application where the
+    /// function is a lambda parameter.
+    ///
+    /// If the function is partially applied, the parameters are simply added to the PAP (using
+    /// `:add_to_pap`). If the function is not partially applied, the parameters are wrapped in a
+    /// environment and the `:make_thunk_from_pap` function is called.
     fn make_thunk_from_func_param(
         &mut self,
         instrs: &mut Vec<Instruction>,
@@ -1136,6 +1208,7 @@ impl CodeGen {
         Ok(local_idx)
     }
 
+    /// Generates the code for the apply function.
     fn generate_apply_function(&mut self) -> Result<u32, String> {
         let functions = self.functions.as_mut().unwrap();
 
@@ -1202,6 +1275,7 @@ impl CodeGen {
     }
 }
 
+/// Generates the code for the given symbol table. Returns the generated code as a vector of bytes.
 pub fn generate_code(
     symbol_table: validator::SymbolTable,
     print_wasm: bool,

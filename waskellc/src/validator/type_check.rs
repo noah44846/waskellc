@@ -6,9 +6,12 @@ use itertools::Itertools;
 
 use crate::validator::symbol_check::*;
 
+/// A Key type for the TypeVarAssignments HashMap
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 struct TypeVarAssignmentKey {
+    /// The name of the type variable
     var_name: String,
+    /// The name of the context symbol
     ctx_symbol_name: String,
 }
 
@@ -29,9 +32,12 @@ impl TryFrom<&Type> for TypeVarAssignmentKey {
     }
 }
 
+/// A Value type for the TypeVarAssignments HashMap
 #[derive(Clone, PartialEq)]
 struct TypeVarAssignmentValue {
+    /// The type variable wrapped in a node of a disjoint set
     ty: disjoint_sets::UnionFindNode<Type>,
+    /// The concrete type of the type variable
     concrete_ty: Option<Type>,
 }
 
@@ -59,18 +65,22 @@ impl TryFrom<&Type> for TypeVarAssignmentValue {
     }
 }
 
+/// A HashMap that maps type variables to their values
 #[derive(Debug)]
 struct TypeVarAssignments(HashMap<TypeVarAssignmentKey, TypeVarAssignmentValue>);
 
 impl TypeVarAssignments {
+    /// Creates a new TypeVarAssignments
     fn new() -> Self {
         Self(HashMap::new())
     }
 
+    /// Gets the value of a type variable
     fn get(&self, ty: &Type) -> Option<&TypeVarAssignmentValue> {
         self.0.get(&ty.try_into().unwrap())
     }
 
+    /// Compares two types recursively and assigns the type variables if possible
     fn assign_or_check(&mut self, ty1: &Type, ty2: &Type) -> bool {
         match (ty1, ty2) {
             (Type::TypeVar { .. }, Type::TypeVar { .. }) => {
@@ -180,6 +190,10 @@ impl TypeVarAssignments {
     }
 }
 
+/// Type checks the symbol table. The symbol table consumed, modified and returned.
+///
+/// The symbol table is consumed because if it isn't consumed, a mutable reference to the symbol
+/// would be held by the symbol table.
 pub fn type_check_syms(symbol_table: SymbolTable) -> Result<SymbolTable, String> {
     let mut res = HashMap::new();
     for (name, symbol) in symbol_table.into_iter() {
@@ -190,6 +204,8 @@ pub fn type_check_syms(symbol_table: SymbolTable) -> Result<SymbolTable, String>
     Ok(res)
 }
 
+/// Type checks a symbol and returns an error if the symbol has an invalid type. The symbol is
+/// modified in place.
 fn type_check_sym(symbol: &mut Symbol) -> Result<(), String> {
     let is_imported = symbol.is_imported();
     let is_exported = symbol.is_exported();
@@ -216,6 +232,10 @@ fn type_check_sym(symbol: &mut Symbol) -> Result<(), String> {
     Ok(())
 }
 
+/// Type checks a top level expression and returns an error if the expression has an invalid type.
+///
+/// If the expression is has type variables, the assignments are checked to verify that a generic
+/// function doesn't have a concrete types in the same disjoint set for example.
 fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<(), String> {
     let mut scope = vec![];
     let mut ty_var_assigns = TypeVarAssignments::new();
@@ -354,6 +374,10 @@ fn type_check_top_level_expr(expr: &mut Expression, parent_ty: &Type) -> Result<
     }
 }
 
+/// Type checks an expression and returns the type of the expression if it is valid.
+///
+/// The function applications are flattened and the type variables are assigned in the type
+/// variable assignments.
 fn type_check_expr(
     expr: &mut Expression,
     scope: &mut Vec<(String, Type)>,
@@ -595,6 +619,11 @@ fn type_check_expr(
     flatten_function_ty(&res?)
 }
 
+/// Flattens a function type recursively and returns the flattened type.
+///
+/// The function type is flattened by removing the nested function types and concatenating the
+/// parameters and return types. For example, the type `Int -> ((Char -> Bool) -> (Bool -> Int))` is flattened
+/// to `Int -> (Char -> Bool) -> Bool -> Int`.
 pub fn flatten_function_ty(ty: &Type) -> Result<Type, String> {
     match ty {
         Type::Function(tys) => {
