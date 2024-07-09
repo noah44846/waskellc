@@ -48,7 +48,7 @@ pub enum Token {
     Integer(i32),
 
     /// Char literals
-    #[regex(r#"'[^']*'"#, |lex| lex.slice().chars().nth(1).unwrap())]
+    #[regex(r#"'[^']'"#, |lex| lex.slice().chars().nth(1).unwrap())]
     Char(char),
 
     /// String literals

@@ -221,7 +221,10 @@
   show link: underline
 
   // Add custom syntax highlighting
-  set raw(syntaxes: "syntaxes/wast/wast.sublime-syntax")
+  set raw(syntaxes: "syntaxes/wast.sublime-syntax")
+
+  // override link default style
+  show link: set underline(stroke: 0pt)
 
   doc
 

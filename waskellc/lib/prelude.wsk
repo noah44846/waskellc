@@ -83,9 +83,12 @@ foreign import wasm "lib" (>) :: Int -> Int -> Bool;
 foreign import wasm "lib" (<=) :: Int -> Int -> Bool;
 foreign import wasm "lib" (>=) :: Int -> Int -> Bool;
 foreign import wasm "lib" compare :: Int -> Int -> Ordering;
-foreign import wasm "lib" div :: Int -> Int -> Int;
-foreign import wasm "lib" mod :: Int -> Int -> Int;
+foreign import wasm "lib" quot :: Int -> Int -> Int;
+foreign import wasm "lib" rem :: Int -> Int -> Int;
 foreign import wasm "lib" intToChar :: Int -> Char;
+
+quotRem :: Int -> Int -> (Int, Int);
+quotRem x y = (x `quot` y, x `rem` y);
 
 maxBound :: Int;
 maxBound = 2147483647;
@@ -111,54 +114,17 @@ abs x = if' (x < 0) (negate x) x;
 (^) x y = x * (x ^ (y - 1));
 
 even :: Int -> Bool;
-even x = (x `mod` 2) == 0;
+even x = (x `rem` 2) == 0;
 
 odd :: Int -> Bool;
 odd = not . even;
 
 intToString :: Int -> String;
-intToString x = if' (x < 0) (Cons '-' (intToString (negate x))) (if' (x < 10) (Cons (intToChar (x + 48)) Nil) ((intToString (x `div` 10)) ++ (Cons (intToChar ((x `mod` 10) + 48)) Nil)));
+intToString x = if' (x < 0) (Cons '-' (intToString (negate x))) (if' (x < 10) (Cons (intToChar (x + 48)) Nil) ((intToString (x `quot` 10)) ++ (Cons (intToChar ((x `rem` 10) + 48)) Nil)));
 
 -- List functions
 
 data List a = Nil | Cons a (List a);
---l :: List Int;
---l = (Cons 1 (Cons 2 (Cons 3 Nil)));
-
---h :: Int -> List Int;
---h x = Cons x (Cons x Nil);
-
---t :: List Int;
---t = maybe Nil id (tail l);
---t = maybe Nil id (init l);
-
--- maximum and minimum don't work with since they evaluate the list and then use the evaluated version
--- scanr doesn't maybe because it evaluates twice ? or make val uses 1 instead of 0
-
---main :: Int;
---main = maybe 0 id ((map negate l) !! 1);
---main = maybe 0 id ((filter odd l) !! 1);
---main = maybe 0 id ((filter ((>=) 2) l) !! 1);
---main = foldr (+) 0 l;
---main = maybe (-1) id ((foldr (Cons) Nil l) !! 1);
---main = if' (null Nil) 0 1;
---main = if' (null l) 0 1;
---main = length l;
---main = maybe (-1) id (t !! 0);
---main = maybe (-1) id (last l);
---main = if' (or (map ((>) (-1)) l)) 1 0;
---main = if' (and (map ((>) (4)) l)) 1 0;
---main = if' (any ((>=) 0) l) 1 0;
---main = if' (all ((>) 4) l) 1 0;
---main = foldr (+) 0 (concat (Cons l (Cons l Nil)));
---main = length (fst (splitAt 1 l)) + length (snd (splitAt 1 l));
---main = maybe (-1) id ((take 8 (cycle l)) !! 4);
---main = maybe (-1) id ((fst (span ((>=) 2) l)) !! 3);
---main = maybe (-1) id ((fst (unzip (zip l l))) !! 1);
---main = sum l;
---main = sum (concatMap h l);
---main = maybe (-1) id ((scanl (+) 0 l) !! 3);
---main = maybe (-1) id ((iterate ((*) 2) 1) !! 10);
 
 listToString :: (a -> String) -> List a -> String;
 listToString _ Nil = "Nil";
@@ -377,6 +343,12 @@ eitherEq _ g (Right x) (Right y) = g x y;
 
 data Ratio = Ratio Int Int;
 
+ratioToString :: Ratio -> String;
+ratioToString (Ratio a b) = (intToString a) ++ " % " ++ (intToString b);
+
+ratioEq :: Ratio -> Ratio -> Bool;
+ratioEq a b = (numerator a == numerator b) && (denominator a == denominator b);
+
 (%) :: Int -> Int -> Ratio;
 (%) a b = Ratio a b;
 
@@ -408,10 +380,4 @@ divRatio :: Ratio -> Ratio -> Ratio;
 divRatio a b = mulRatio a (recipRatio b);
 
 evalToInt :: Ratio -> Int;
-evalToInt (Ratio a b) = a `div` b;
-
-ratioToString :: Ratio -> String;
-ratioToString (Ratio a b) = (intToString a) ++ " % " ++ (intToString b);
-
-ratioEq :: Ratio -> Ratio -> Bool;
-ratioEq a b = (numerator a == numerator b) && (denominator a == denominator b);
+evalToInt (Ratio a b) = a `quot` b;

@@ -66,7 +66,7 @@ add3 :: Int -> Int -> Int -> Int;
 add3 x y z = x + y + z;
 
 avg3 :: Int -> Int -> Int -> Int;
-avg3 x y z = (x + y + z) `div` 3;
+avg3 x y z = (x + y + z) `quot` 3;
 
 sub3 :: Int -> Int -> Int -> Int;
 sub3 x y z = (x - y) - z;
@@ -75,7 +75,7 @@ sub3' :: Int -> Int -> Int -> Int;
 sub3' x y z = x + (-y) + (-z);
 
 add3Test :: ();
-add3Test = test (==) intToString (add3 (3 * 4) (add3 1 2 (-4 `div` 2)) (10 - 3)) 20 "add3Test";
+add3Test = test (==) intToString (add3 (3 * 4) (add3 1 2 (-4 `quot` 2)) (10 - 3)) 20 "add3Test";
 
 avg3Test :: ();
 avg3Test = test (==) intToString (avg3 1 2 3) 2 "avg3Test";

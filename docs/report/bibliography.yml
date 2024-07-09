@@ -8,6 +8,13 @@ spec_doc:
   language: English
   note: This document is in the appendix
 
+un_sdg:
+  type: Web
+  title: United Nations Sustainable Development Goals
+  author: United Nations
+  url: https://sdgs.un.org/goals
+  date: 2024
+
 ocaml_wasm:
   type: Web
   title: News about OCaml and WebAssembly
@@ -103,3 +110,17 @@ ghc_compiler:
   author: Brian O'Sullivan
   url: https://www.scs.stanford.edu/11au-cs240h/notes/ghc.html
   date: 2012
+
+asterius_compiler:
+  type: Web
+  title: Asterius compiler github repository
+  author: Tweag I/O
+  url: https://github.com/tweag/asterius
+  date: 2022
+
+wisp_compiler:
+  type: Web
+  title: Wisp compiler github repository
+  author: Mikael Brockman
+  url: https://github.com/mbrock/wisp
+  date: 2022

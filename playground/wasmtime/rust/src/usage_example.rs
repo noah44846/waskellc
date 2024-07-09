@@ -14,7 +14,7 @@ pub fn usage_example_main() -> Result<()> {
 
     let module = Module::from_file(&engine, "../../../waskellc/out.wasm")?;
     linker
-        .func_wrap("foreign", "print", |arg: i32| -> () {
+        .func_wrap("foreign", "printInt", |arg: i32| -> () {
             println!("Printing from host: {}", arg);
         })?
         .module(&mut store, "", &module)?;

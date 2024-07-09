@@ -2,9 +2,9 @@ foreign export wasm square :: Int -> Int;
 square x = x * x;
 
 foreign export wasm sq_print :: Int -> ();
-sq_print x = print (square x);
+sq_print x = printInt (square x);
 
-foreign import wasm print :: Int -> ();
+foreign import wasm printInt :: Int -> ();
 
 main :: ();
 main = const (sq_print 3) (sq_print 4);

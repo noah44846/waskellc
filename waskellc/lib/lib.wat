@@ -302,7 +302,7 @@
     (return (call $make_val (i32.const 1) (local.get $a)))
   )
 
-  (func (export "div") (param $x i32) (param $y i32) (result i32)
+  (func (export "quot") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
       (i32.div_s
@@ -310,7 +310,7 @@
         (call $full_eval (local.get $y)))))
   )
 
-  (func (export "mod") (param $x i32) (param $y i32) (result i32)
+  (func (export "rem") (param $x i32) (param $y i32) (result i32)
     (return (call $make_val
       (i32.const 0)
       (i32.rem_s
