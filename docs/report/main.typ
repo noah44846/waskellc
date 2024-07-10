@@ -165,7 +165,7 @@ Disadvantages:
 
 Lisp (List Processing) is a family of programming languages with a long history and a distinctive syntax based on parentheses and lists. Common Lisp and Clojure are two prominent dialects of Lisp.
 
-#heading("Common Lisp", level: 4, numbering: none, outlined: false)
+==== Common Lisp
 
 Common Lisp is a multi-paradigm language that supports functional, imperative, and object-oriented programming styles. It is used in artificial intelligence, computer algebra, and symbolic computation applications.
 
@@ -177,7 +177,7 @@ Disadvantages:
 - No built-in support for Wasm compilation, which means there is no reference implementation for the project.
 - The author is not familiar with Common Lisp and would need to learn the language from scratch.
 
-#heading("Clojure", level: 4, numbering: none, outlined: false)
+==== Clojure
 
 Clojure is a modern Lisp dialect that runs on the Java Virtual Machine (JVM) and emphasizes immutable data structures and functional programming. It is designed for concurrent and parallel programming, and is often used in web development and data analysis applications.
 
@@ -193,7 +193,7 @@ Disadvantages:
 
 The Beam languages, Elixir and Erlang, are functional programming languages that run on the Erlang Virtual Machine (BEAM). They are designed for building scalable, fault-tolerant, and distributed systems.
 
-#heading("Erlang", level: 4, numbering: none, outlined: false)
+==== Erlang
 
 Erlang is a general-purpose, concurrent programming language with built-in support for distributed computing. It is widely used in telecommunications, banking, and e-commerce systems that require high availability and fault tolerance.
 
@@ -204,7 +204,7 @@ Advantages:
 Disadvantages:
 - The author has limited experience with Erlang, which may complicate the task of defining a subset.
 
-#heading("Elixir", level: 4, numbering: none, outlined: false)
+==== Elixir
 
 Elixir is a more recent functional language that builds upon the strengths of Erlang's VM and ecosystem. It aims to provide a more modern and productive syntax while maintaining the robustness and concurrency features of Erlang.
 
@@ -249,9 +249,13 @@ The functional programming paradigm is based on the concept of functions as firs
 - *Higher-order functions*: Functions can take other functions as arguments or return functions as results, enabling powerful abstractions and expressive code.
 - *Declarative style*: Functional programming focuses on what should be computed rather than how, leading to more readable and maintainable code.
 
+For more details on the functional programming paradigm or more specifically on Haskell, refer to official Haskell wiki:
+
+#align(center)[https://wiki.haskell.org/Introduction]
+
 In the following sections, some key features of the functional programming paradigm that are relevant to the project will be discussed.
 
-=== Partial application and currying
+=== Partial application and currying <chp_currying>
 
 Partial application and currying are common techniques in functional programming that involve creating new functions by applying a function to some of its arguments. Partial application involves supplying fewer arguments than the function expects, while currying involves transforming a function that takes multiple arguments into a series of functions that each take a single argument.
 
@@ -315,9 +319,9 @@ The `List` type is another example of an algebraic data type that represents a l
 
 Pattern matching is a powerful feature in functional programming that allows developers to destructure data structures and extract values based on their shape. It is often used in conjunction with algebraic data types to define functions that operate on different alternatives of a sum type.
 
-In Haskell, pattern matching is achieved using the `case` expression or function definitions with pattern matching clauses. The `Boolean` type definition from @lst_algebraic_data_types can be used to define a function that negates a boolean value. The function `negateBoolean` pattern matches on the `Boolean` type and returns the opposite value. @lst_pattern_matching shows an example of the `negateBoolean` function in Haskell.
+In Haskell, pattern matching is achieved using the `case` expression or function definitions with pattern matching clauses. The `Boolean` type definition from @lst_algebraic_data_types can be used to define a function that negates a boolean value. The function `negateBoolean` pattern matches on the `Boolean` type and returns the opposite value. @lst_pattern_matching_haskell shows an example of the `negateBoolean` function in Haskell.
 
-The `List` type definition from @lst_algebraic_data_types can be used to define a function that calculates the length of a list. The `length` function pattern matches on the `List` type and recursively calculates the length of the list. @lst_pattern_matching shows an example of the `length` function in Haskell. As we can see, pattern matching allows for capturing values from different alternatives of a sum type and defining functions that operate on these values like the `xs` in the `Cons` alternative of the `List` type (the `_` is a wildcard pattern that matches any values without binding them).
+The `List` type definition from @lst_algebraic_data_types can be used to define a function that calculates the length of a list. The `length` function pattern matches on the `List` type and recursively calculates the length of the list. @lst_pattern_matching_haskell shows an example of the `length` function in Haskell. As we can see, pattern matching allows for capturing values from different alternatives of a sum type and defining functions that operate on these values like the `xs` in the `Cons` alternative of the `List` type (the `_` is a wildcard pattern that matches any values without binding them).
 
 #figure(
   code_block[```haskell
@@ -336,7 +340,7 @@ The `List` type definition from @lst_algebraic_data_types can be used to define 
   length (Cons _ xs) = 1 + length xs
   ```],
   caption: [Example of pattern matching in Haskell.],
-) <lst_pattern_matching>
+) <lst_pattern_matching_haskell>
 
 === Parametric polymorphism
 
@@ -382,7 +386,7 @@ Lazy evaluation is a feature of functional programming languages that delays the
 
 The only way to force the evaluation of an expression in Haskell is through pattern matching or through the evaluation of the `main` function (there are other ways but they are not relevant for this project). This can lead to more efficient code execution and resource usage, as only the necessary parts of the program are evaluated when needed. However, lazy evaluation can also introduce complexities in reasoning about the order of evaluation and performance considerations.
 
-@lst_lazy_evaluation shows an example of lazy evaluation in Haskell. The `repeat` function creates an infinite list of the same value by recursively consing the value to the rest of the list. The `take` function takes a number `n` and a list and returns the first `n` elements of the list. When we call `take 5 (repeat 1)`, Haskell only evaluates the first 5 elements of the infinite list, demonstrating the power of lazy evaluation.
+@lst_lazy_evaluation_haskell shows an example of lazy evaluation in Haskell. The `repeat` function creates an infinite list of the same value by recursively consing the value to the rest of the list. The `take` function takes a number `n` and a list and returns the first `n` elements of the list. When we call `take 5 (repeat 1)`, Haskell only evaluates the first 5 elements of the infinite list, demonstrating the power of lazy evaluation.
 
 #figure(
   code_block[```haskell
@@ -399,7 +403,7 @@ The only way to force the evaluation of an expression in Haskell is through patt
   -- list = Cons 1 (Cons 1 (Cons 1 (Cons 1 (Cons 1 Nil))))
   ```],
   caption: [Example of lazy evaluation in Haskell.],
-) <lst_lazy_evaluation>
+) <lst_lazy_evaluation_haskell>
 
 Internally, the GHC (Glasgow Haskell Compiler) uses a technique called graph reduction to evaluate expressions lazily. This technique represents expressions as graphs of nodes and edges, where each node represents a value and each edge represents a reference to another node. When an expression is evaluated, the graph is traversed and nodes are evaluated as needed. This allows for sharing of common subexpressions and efficient memory usage. So as an added bonus, no expression is evaluated more than once.
 
@@ -867,6 +871,8 @@ The lexical syntax of Waskell is identical to Haskell. @lst_lexical_syntax shows
   caption: [Lexical syntax of the functional language.],
 ) <lst_lexical_syntax>
 
+One of the main differences between the lexical syntax of Haskell and the one of Waskell is the lack of the so-called layout rule in the latter. In Haskell, the layout rule allows the programmer to omit braces and semicolons in the source code by using indentation to indicate the structure of the program. In Waskell, the layout rule is not supported, and the programmer must use braces and semicolons to delimit blocks of code. Every declaration must be followed by a semicolon.
+
 === Context-free syntax
 
 The context-free syntax of Waskell is a subset of Haskell (defined in report @haskell_spec). The context-free syntax of Waskell is based on this document. @lst_context_free_syntax shows the context-free syntax of the functional language (the text after the annotations is the non-terminal's name used in the compiler).
@@ -947,44 +953,373 @@ The context-free syntax of Waskell is a subset of Haskell (defined in report @ha
   caption: [Context-free syntax of the functional language.],
 ) <lst_context_free_syntax>
 
-// don't to mention constructor symbols are not supported
+=== Function declarations
 
-As we can see the context-free syntax is a subset of Haskell. The language features that are supported are the following:
+All function declarations have to be preceded by a type signature (there is no automatic type inference for function declarations). The type signature specifies the function's name, the types of its parameters, and the return type. The type signature is followed by the function's definition, which consists of a series of equations with pattern matching. The function's definition can include multiple equations with different patterns to handle different cases (more on pattern matching in @chp_pattern_matching).
 
--
+The definition of the function can have less arguments than the type signature specifies as long as the expression on the right-hand side of the equation is a function that takes the remaining arguments (more on partial application in @chp_function_application).
 
-=== Language features
+@lst_function_declarations shows the syntax for function declarations in the functional language.
 
-//Skipped features (compare to spec):
+#figure(
+  code_block[```haskell
+  -- Function declaration with a single parameter.
+  f :: Int -> Int;
+  f x = x + 1;
 
-//- irrefutable patterns + pattern bindings
-//- typed expressions
-//- holes
-//- operator stuff ?? (precedence, associativity, fixity, arity > 2 operators / paren func def thing)
-  //- "(a &\* b) c = ..."
-//- Floats
-//- string escaping
-//- No sections (e.g. (1 +) or (+ 1))
-//- labeled fields in records
-//- operator precedence
-//- definition of operator type constructors (check for usage of operators in general)
+  -- Function declaration with multiple parameters.
+  g :: Int -> Int -> Int;
+  g x y = x * y;
 
-In short the subset of Haskell that is used in Waskell is the following:
-- Function declarations with simple pattern matching
-- Function application and currying
-- Forced type annotations (no type inference)
-- Simple types (Int, Bool, Char, String, List, Tuple)
-- Simple custom generic types (no type classes)
-- Simple type polymorphism (no type classes)
-- Defining operators (no precedence, associativity, fixity)
+  -- Function declaration with pattern matching.
+  fib :: Int -> Int;
+  fib 0 = 0;
+  fib 1 = 1;
+  fib n = fib (n - 1) + fib (n - 2);
 
-#todo("make chapter about each feature with examples and exceptions")
+  -- Function declaration with partial application.
+  add :: Int -> Int -> Int;
+  add x = (+) x;
 
-=== Standard library design
+  -- Function declaration of a higher-order function.
+  -- first argument is a function that takes any type and returns a value of that type (a -> a)
+  -- second argument is a value of that type (a)
+  -- the return value is a value of that type (a)
+  applyTwice :: (a -> a) -> a -> a;
+  applyTwice f x = f (f x);
+  ```],
+  caption: [Syntax for function declarations.],
+) <lst_function_declarations>
 
-The standard library of the functional language is a subset of the Haskell standard library (or the Prelude). The standard library provides a set of functions and types that are commonly used in functional programming. The standard library includes functions for working with lists, tuples, numbers, and other data types. The design of the standard library is based on the Haskell standard library documentation @haskell_prelude.
+=== Pattern matching <chp_pattern_matching>
 
-#heading("Basic types", level: 4, numbering: none, outlined: false)
+Pattern matching is a fundamental feature of functional programming languages that allows functions to be defined by cases. Each case consists of a pattern and an expression. When a function is applied to an argument, the patterns are matched against the argument to determine which case applies. If a match is found, the corresponding expression is evaluated. If no match is found, an error is raised.
+
+Pattern matching can be used in function declarations (as shown in @lst_function_declarations) to define functions that behave differently based on the input arguments. Patterns can include literals, variables, constructors (more on constructors and data structures in @chp_simple_types), wildcards, and tuples. Patterns can also be nested to match complex data structures.
+
+@lst_pattern_matching shows examples of pattern matching in the functional language.
+
+#figure(
+  code_block[```haskell
+  -- Pattern matching with literals.
+  isZero :: Int -> Bool;
+  isZero 0 = True;
+  isZero _ = False;
+
+  -- Pattern matching with variables.
+  factorial :: Int -> Int;
+  factorial 0 = 1;
+  factorial n = n * factorial (n - 1);
+
+  -- Pattern matching with constructors.
+  data List a = Nil | Cons a (List a);
+  length :: List a -> Int;
+  length Nil = 0;
+  length (Cons _ xs) = 1 + length xs;
+
+  -- Pattern matching with tuples.
+  fst :: (a, b) -> a;
+  fst (x, _) = x;
+
+  -- Pattern matching with nested patterns.
+  data Maybe a = Just a | Nothing;
+  maybeLength :: Maybe (List a) -> Int;
+  maybeLength Nothing = 0;
+  maybeLength (Just Nil) = 0;
+  maybeLength (Just (Cons _ xs)) = 1 + maybeLength (Just xs);
+  ```],
+  caption: [Examples of pattern matching.],
+) <lst_pattern_matching>
+
+=== Function application <chp_function_application>
+
+Function application is the process of applying a function to its arguments. In the functional language, functions can be applied to one or more arguments, and the arguments can be expressions, variables, literals, or other functions. Function application can be used to create new functions by partially applying (see @chp_currying) existing functions.
+
+As seen in @lst_function_declarations, function declarations can have less arguments than the type signature specifies. This is because the expression on the right-hand side of the equation is an expression that returns a function that takes the remaining arguments.
+
+@lst_function_application shows examples of function application in the functional language.
+
+#figure(
+  code_block[```haskell
+  -- Function application with literals.
+  add :: Int -> Int -> Int;
+  add x y = x + y;
+
+  result1 :: Int;
+  result1 = add 1 2;
+
+  -- Function application with variables.
+  square :: Int -> Int;
+  square x = x * x;
+
+  result2 :: Int;
+  result2 = square result1;
+
+  -- Function application with expressions.
+  result3 :: Int;
+  result3 = add (square 3) (square 4);
+
+  -- Function application with partial application.
+  addOne :: Int -> Int;
+  addOne = add 1;
+
+  result4 :: Int;
+  result4 = addOne 5;
+
+  -- Function application with higher-order functions.
+  applyTwice :: (a -> a) -> a -> a;
+  applyTwice f x = f (f x);
+
+  result5 :: Int;
+  result5 = applyTwice square 2;
+
+  result6 :: Int;
+  result6 = applyTwice (add 1) 2;
+  ```],
+  caption: [Examples of function application.],
+) <lst_function_application>
+
+=== Simple types <chp_simple_types>
+
+Waskell supports the definition of simple algebraic data types. It includes some built-in types like tuples, integers, characters and strings (which is an alias for lists of characters). The definition of custom data types is done using the `data` keyword. A data type can have one or more data constructors, each of which can have zero or more arguments. The data constructors can be used in pattern matching to create and deconstruct values of the data type.
+
+Each type can also have its own type variables (more on type variables in @chp_polymorphism). The name given to a type can also be called a type constructor since it constructs a new type from other types. For example, the type `List` is a type constructor that constructs a new type from the type variable `a`, a list of integers would be `List Int` (a type application). In Waskell only concrete types can be used in a type application, so `List` is not a type but a type constructor that needs to be applied to a concrete type to become a new concrete type itself. A good analogy is that a type constructor is like a function that operates on types instead of values, with the difference that a type constructor can't recieve another type constructor as an argument (see the `Foo` type in @lst_simple_types).
+
+If a data constructor has type variables, the type variables must be declared in the data type definition. The type variables are used to make the data type generic over types. For example, the `List a` type is generic over the element type `a`, so it can represent lists of integers, characters, or any other type (more on polymorphism in @chp_polymorphism).
+
+@lst_simple_types shows examples of simple types in the functional language.
+
+#figure(
+  code_block[```haskell
+  -- Simple type definition.
+  data Bool = True | False;
+  bool :: Bool;
+  bool = True;
+
+  -- Simple type definition with data constructor arguments.
+  data Ratio = Ratio Int Int;
+  ratio :: Ratio;
+  ratio = Ratio 1 2;
+
+  -- Custom data type with multiple constructors.
+  data Maybe a = Just a | Nothing;
+  maybe1 :: Maybe Int;
+  maybe1 = Just 42;
+
+  maybe2 :: Maybe Int;
+  maybe2 = Nothing;
+
+  -- Custom data type with type variables.
+  data List a = Nil | Cons a (List a);
+  list :: List Int;
+  list = Cons 1 (Cons 2 Nil);
+
+  -- Custom data type with multiple type variables.
+  data Either a b = Left a | Right b;
+  either1 :: Either Int Bool;
+  either1 = Left 42;
+
+  either2 :: Either Int Bool;
+  either2 = Right True;
+
+  -- Having a type variable that takes a type constructors which takes another type is not supported.
+  -- This code does not compile in Waskell.
+  data Foo a b = Foo (b a);
+  foo :: Foo Int List;
+  foo = Foo (Cons 1 Nil);
+  ```],
+  caption: [Examples of simple types.],
+) <lst_simple_types>
+
+=== Polymorphism <chp_polymorphism>
+
+Polymorphism (or in this case parametric polymorphic) is a feature that allows functions and data types to be generic over types. In the functional language, polymorphism is achieved through type variables. Type variables are placeholders for concrete types that can be instantiated with different types. Functions and data types that use type variables are polymorphic and can work with a wide range of types.
+
+The functional language supports simple type polymorphism, where type variables can be used to define functions and data types that are generic over types. Type variables are introduced using lowercase variable identifiers (by convention, single-letter identifiers are used). Type variables can be used in type signatures to specify the types of function parameters, return values, and data constructors.
+
+Haskell also supports ad-hoc polymorphism (or function overloading) through type classes, but this feature is not included in Waskell.
+
+@lst_polymorphism shows examples of polymorphic functions and data types in the functional language.
+
+#figure(
+  code_block[```haskell
+  -- Polymorphic function with type variables.
+  id :: a -> a;
+  id x = x;
+
+  -- Polymorphic function with multiple type variables.
+  const :: a -> b -> a;
+  const x _ = x;
+
+  -- Polymorphic function with type variables and type constructors.
+  map :: (a -> b) -> List a -> List b;
+  map f Nil = Nil;
+  map f (Cons x xs) = Cons (f x) (map f xs);
+  ```],
+  caption: [Examples of polymorphism.],
+) <lst_polymorphism>
+
+=== Operators
+
+Operators are functions that can be used in infix notation. In the functional language, operators are defined using symbols (e.g., `+`, `-`, `*`) or a combination of symbols (e.g., `&&`, `||`). Operators can also be used in prefix notation by enclosing them in parentheses (e.g., `(+)`, `(&&)`). Normal functions can also be used in infix notation by enclosing them in backticks (e.g., ``` x `add` y ```).
+
+Waskell only supports infix notation for binary operators. The definition of precedence, associativity, fixity, and $"arity" != 2$ operators is not supported in Waskell. Since there the different operators don't have a precedence, the order of evaluation is determined by the order of the operators in the expression. If the programmer wants to enforce a specific order of evaluation, parentheses can be used to group expressions (e.g., `(x + y) * z` and `x + y * z` are the same in Waskell).
+
+Sections and constructor symbols are not supported in Waskell. Sections are a feature of Haskell that allows the programmer to partially apply infix operators by fixing one of the arguments (e.g., `(/2)` or `(2/)`). Constructor symbols are a feature of Haskell that allows the programmer to define custom operators using symbols (e.g., `(:)`, the cons operator for lists).
+
+To define an operator in Waskell, the operator must be enclosed in parentheses and used as a function name. The infix syntax to define an operator is not supported in Waskell.
+
+@lst_operators shows examples of operators in the functional language.
+
+#figure(
+  code_block[```haskell
+  -- Operator definition using symbols.
+  (++) :: List a -> List a -> List a;
+  (++) Nil ys = ys;
+  (++) (Cons x xs) ys = Cons x (xs ++ ys);
+
+  -- Operator usage in infix notation.
+  list1 :: List Int;
+  list1 = (Cons 1 (Cons 2 Nil)) ++ Cons 3 Nil;
+
+  -- Operator usage in prefix notation.
+  list2 :: List Int;
+  list2 = (++) (Cons 1 (Cons 2 Nil)) (Cons 3 Nil);
+
+
+  div :: Int -> Int -> Int;
+  div x y = x / y;
+
+  -- Function usage in infix notation.
+  val :: Int;
+  val = 4 `div` 2;
+  ```],
+  caption: [Examples of operators.],
+) <lst_operators>
+
+=== Lazy evaluation
+
+Waskell uses lazy evaluation to evaluate expressions. Lazy evaluation is a strategy where expressions are only evaluated when their values are needed. This allows for more efficient evaluation of expressions and can prevent unnecessary computations. In lazy evaluation, expressions are represented as thunks, which are unevaluated computations that can be forced to produce a value.
+
+Lazy evaluation allows for the creation of infinite data structures and the use of higher-order functions like `map`, `filter`, and `foldr`. Lazy evaluation also allows for the use of recursion without the risk of stack overflow, as only the necessary parts of the computation are evaluated.
+
+In Waskell (as in Haskell), the entry point of the program is the `main` function. The `main` function is a special function that is called when the program is executed (it is exported by default). As with any other exported function, the evaluation of the expressions in the `main` function is forced when the function is called.
+
+The only other way to force the (partial not complete) evaluation of an expression in Waskell is during pattern matching. When a pattern is matched, the expression on the right-hand side of the equation is evaluated until a data constructor is reached. This is done to determine which case applies and to bind the variables in the pattern to the values in the data constructor.
+
+The reason why pattern matching only "partially" evaluates the expression is that the expression is only evaluated until a data constructor is reached. An infinite data structure can be pattern matched without causing an infinite loop, as only the necessary parts of the data structure are evaluated (e.g., `take 5 (repeat 1)` will only evaluate the first 5 elements of the infinite list).
+
+Because of lazy evaluation, imported functions that return void are mapped to functions that return unit (a type with a single value, `()`). This is done to prevent the evaluation of the imported function when it is called from the host language. The evaluation of the imported function is deferred until the value is needed.
+
+@lst_lazy_evaluation shows examples of lazy evaluation in Waskell (for more examples see @lst_lazy_evaluation_haskell).
+
+#figure(
+  code_block[```haskell
+  foreign export wasm square :: Int -> Int;
+  square x = x * x;
+
+  foreign export wasm sq_print :: Int -> ();
+  sq_print x = printInt (square x);
+
+  foreign import wasm printInt :: Int -> ();
+
+  const :: a -> b -> a;
+  -- The second argument is not evaluated because the first argument is returned.
+  const x _ = x;
+
+  main :: ();
+  main = const (sq_print 3) (sq_print 4);
+  -- if the printInt function is implemented to print the value and return it, the output will be: 9
+  -- 16 is not printed because the second printInt is not evaluated
+  ```],
+  caption: [Examples of lazy evaluation.],
+) <lst_lazy_evaluation>
+
+=== Embedding
+
+The embedding of Waskell code in other languages works by using the import and export features of Wasm. Any Waskell function can be exported to be used in other languages and any Wasm function can be imported to be used in Waskell. The import and export features are used to define foreign function interfaces (FFI) that allow functions written in different languages to interact with each other.
+
+Wasmtime and Wasmer allow for functions in the host language to be injected into one of the Wasm module's imports. This allows for the Wasm module to call functions in the host language. The host language can also call functions in the Wasm module by using the Wasm module's exports.
+
+To export a function from Waskell, the function must be declared with the `foreign export wasm` keyword. The function can then be called from other languages by importing the Wasm module and calling the exported function. To import a function into Waskell, the function must be declared with the `foreign import wasm` keyword. The function can then be called from Waskell by using the imported function name.
+
+For the implementation of the compiler, some Wasm functions will be imported to provide basic functionality like memory allocation, deallocation, and other low-level operations. For these functions, the implementation will use the `foreign import wasm "lib"` syntax to import the functions from a predefined Wasm library. The added `"lib"` keyword is used to indicate that the function is part of a library and not a custom function since it has a different calling convention.
+
+When exporting functions from Waskell, some times the function will be marked as `"unevaluated"`. This is used to indicate that the function should not be evaluated when called from the host language. This is useful when exporting functions that create recursive data structures that will be later used in Waskell. This feature exists to fix a issue with the current implementation of the compiler (more on this in @chp_challenge_export).
+
+@lst_embedding shows examples of embedding Waskell code in other languages.
+
+#figure(
+  code_block[```haskell
+  -- Exporting a function from Waskell.
+  foreign export wasm fib :: Int -> Int;
+  fib :: Int -> Int;
+  fib 0 = 0;
+  fib 1 = 1;
+  fib n = fib (n - 1) + fib (n - 2);
+
+  -- Importing a function into Waskell.
+  foreign import wasm printInt :: Int -> ();
+
+  -- Using the imported function in Waskell.
+  foreign export wasm fibPrint :: Int -> ();
+  fibPrint n = printInt (fib n);
+
+  -- Importing a function into Waskell from the library.
+  foreign import wasm "lib" (+) :: Int -> Int -> Int;
+
+  -- Exporting a function from Waskell that is unevaluated.
+  data List a = Nil | Cons a (List a);
+  foreign export wasm cons "unevaluated" :: a -> List a -> List a;
+  cons = Cons;
+  ```],
+  caption: [Examples of embedding Waskell code in other languages.],
+) <lst_embedding>
+
+@lst_embedding_usage shows examples of using embedded functions with the wasmtime runtime in Python.
+
+#figure(
+  code_block[```python
+  from wasmtime import FuncType, Store, Module, Linker, ValType, WasiConfig, Engine
+
+  engine = Engine()
+  linker = Linker(engine)
+  linker.define_wasi()
+
+  store = Store(engine)
+  wasi = WasiConfig()
+  wasi.inherit_stdout()
+  wasi.inherit_stdin()
+  wasi.inherit_stderr()
+  wasi.inherit_env()
+  wasi.inherit_argv()
+  store.set_wasi(wasi)
+
+  def printInt(value):
+      print(f'Printing from host: {value}')
+
+  linker.define_func("foreign", "printInt", FuncType([ValType.i32()], []), printInt)
+
+  module = Module.from_file(engine, 'out.wasm')
+  instance = linker.instantiate(store, module)
+
+  fib_print = instance.exports(store)["fibPrint"]
+  fib = instance.exports(store)["fib"]
+
+  fib_print(store, 7)
+  print("fib(7) =", fib(store, 7))
+  # Output:
+  # Printing from host: 13
+  # fib(7) = 13
+  ```],
+  caption: [Examples of using embedded functions with the wasmtime runtime in Python.],
+) <lst_embedding_usage>
+
+== Standard library <chp_standard_library>
+
+The standard library of the functional language is a subset (with some differences to account the lack of some language features) of the Haskell standard library (or the Prelude). The standard library provides a set of functions and types that are commonly used in functional programming. The standard library includes functions for working with lists, tuples, numbers, and other data types. The design of the standard library is based on the Haskell standard library documentation @haskell_prelude.
+
+=== Basic types
 
 @lst_basic_types shows the list of basic types in the standard library.
 
@@ -1014,7 +1349,7 @@ The standard library of the functional language is a subset of the Haskell stand
   caption: [The list of basic types in the standard library.],
 ) <lst_basic_types>
 
-#heading("Boolean functions", level: 4, numbering: none, outlined: false)
+=== Boolean functions
 
 @lst_boolean_functions shows the list of functions for working with booleans in the standard library.
 
@@ -1029,7 +1364,7 @@ The standard library of the functional language is a subset of the Haskell stand
   caption: [The list of functions for working with booleans.],
 ) <lst_boolean_functions>
 
-#heading("Numeric functions", level: 4, numbering: none, outlined: false)
+=== Numeric functions
 
 @lst_numeric_functions shows the list of functions for working with numbers in the standard library.
 
@@ -1051,7 +1386,7 @@ The standard library of the functional language is a subset of the Haskell stand
   caption: [The list of functions for working with numbers.],
 ) <lst_numeric_functions>
 
-#heading("List functions", level: 4, numbering: none, outlined: false)
+=== List functions
 
 @lst_list_functions1 and @lst_list_functions2 shows the list of functions for working with lists in the standard library.
 
@@ -1115,7 +1450,7 @@ The standard library of the functional language is a subset of the Haskell stand
   caption: [The list of functions for working with lists part 2.],
 ) <lst_list_functions2>
 
-#heading("Tuple functions", level: 4, numbering: none, outlined: false)
+=== Tuple functions
 
 @lst_tuple_functions shows the list of functions for working with tuples in the standard library.
 
@@ -1129,7 +1464,7 @@ The standard library of the functional language is a subset of the Haskell stand
   caption: [The list of functions for working with tuples.],
 ) <lst_tuple_functions>
 
-#heading("Ratio functions", level: 4, numbering: none, outlined: false)
+=== Ratio functions
 
 @lst_ratio_functions shows the list of functions for working with ratios in the standard library.
 
@@ -1147,7 +1482,7 @@ The standard library of the functional language is a subset of the Haskell stand
   caption: [The list of functions for working with ratios.],
 ) <lst_ratio_functions>
 
-#heading("Miscellaneous functions", level: 4, numbering: none, outlined: false)
+=== Miscellaneous functions
 
 @lst_misc_functions shows the list of miscellaneous functions in the standard library.
 
@@ -1170,9 +1505,220 @@ The standard library of the functional language is a subset of the Haskell stand
 
 == Compiler architecture
 
-#todo("add diagram and explain the different stages of the compiler")
+The Waskell compiler is implemented in Rust and consists of several components that work together to parse, type-check, and compile Waskell code to WebAssembly. The architecture of the Waskell compiler is shown in @img_compiler_arch.
+
+#figure(
+  image("img/compiler_arch.png", width: 90%),
+  caption: [The architecture of the Waskell compiler.],
+) <img_compiler_arch>
+
+The main components of the Waskell compiler are:
+- *Lexer*: The lexer reads the input source code and tokenizes it into a stream of tokens. The lexer recognizes keywords, identifiers, literals, and other syntactic elements in the source code. The lexer outputs a stream of tokens that are consumed by the parser.
+- *Parser*: The parser reads the stream of tokens produced by the lexer and constructs an abstract syntax tree (AST) that represents the structure of the source code. The parser enforces the grammar rules of the functional language and reports syntax errors if the source code is not well-formed. The parser outputs the AST that is consumed by the compiler.
+- *Validator*: The validator checks the AST for semantic errors, such as type errors, undefined variables, and invalid expressions. The validator ensures that the source code is semantically correct before proceeding to the next stage. The validator outputs a symbol table that is used by the code generator.
+  - *Symbol Checker*: The symbol checker builds a symbol table that maps identifiers to scopes. The symbol table is used to resolve variable references and enforce scoping rules.
+  - *Type Checker*: The type checker checks the types of expressions in the source code. The type checker ensures that expressions are used in a type-safe manner and reports type errors if the source code is not well-typed.
+- *Code Generator*: The code generator reads the symbol table produced by the validator and generates WebAssembly code that implements the functionality of the source code. The code generator translates the functional language constructs into WebAssembly instructions and emits a WebAssembly module that can be executed by a WebAssembly runtime.
 
 = Implementation
+
+#todo[add more details about the implementation of the compiler.]
+
+The implementation of the Waskell compiler is divided into several modules that correspond to the components of the compiler architecture. Each module is responsible for a specific task, such as lexing, parsing, symbol checking, type checking, and code generation. The modules work together to transform the source code into a WebAssembly module that can be executed by a WebAssembly runtime.
+
+All the code for the Waskell compiler can be found in the `waskellc` directory of the repository. The `src` directory contains the Rust source code for the compiler, and the `lib` directory contains the standard library and wasm lib file used by the compiler.
+
+The `waskellc` crate is made up of several modules (see @lst_directory_structure for the directory of the source code):
+- `ast_gen`: Contains the lexer, parser, and AST generation code.
+- `validator`: Contains the symbol checker and type checker code.
+- `code_gen`: Contains the code generator code.
+
+#figure(
+  code_block[```
+  src
+  ├── ast_gen
+  │  ├── lexer.rs
+  │  ├── mod.rs
+  │  └── parser.rs
+  ├── code_gen
+  │  ├── encoder_wrapper.rs
+  │  ├── mod.rs
+  │  └── wasm_generation.rs
+  ├── lib.rs
+  ├── main.rs
+  └── validator
+     ├── mod.rs
+     ├── symbol_check.rs
+     └── type_check.rs
+  ```],
+  caption: [The directory structure of the source code for the `waskellc` crate.],
+) <lst_directory_structure>
+
+== Compiler entry point
+
+The entry point of the Waskell compiler is the `main` function in the `main.rs` file. In order for usage of the compiler to be more user-friendly, the `main` uses the `clap` crate to parse command-line arguments and display help messages. The `main` function reads the input source code from a file, passes it to the lexer, parser, validator, and code generator, and writes the output WebAssembly module to a file.
+
+@lst_compiler_help shows the help message displayed by the Waskell compiler when the `--help` flag is used.
+
+#figure(
+  code_block[```
+  A compiler for the Waskell programming language (subset of Haskell) that targets WebAssembly.
+
+  Usage: waskellc [OPTIONS] <INPUT>
+
+  Arguments:
+    <INPUT>  Path to input file
+
+  Options:
+    -o, --output <OUTPUT>                Path to output file
+    -l, --wasm-lib-path <WASM_LIB_PATH>  Path to wasm lib file [default: lib/lib.wasm]
+    -p, --prelude-path <PRELUDE_PATH>    Path to prelude file [default: lib/prelude.wsk]
+    -d, --debug                          Debug mode
+    -L, --debug-lexer                    Print lexer output
+    -A, --debug-ast                      Print AST
+    -S, --debug-symbols                  Print symbol table
+    -D, --debug-desugar                  Print desugared symbol table
+    -W, --debug-wasm                     Print WAT output of wasm module
+    -s, --show-wasm-offsets              Show offsets in WAT output
+        --no-merge                       Do not merge wasm module with wasm lib
+    -h, --help                           Print help
+    -V, --version                        Print version
+  ```],
+  caption: [Output of the `--help` flag for the Waskell compiler.],
+) <lst_compiler_help>
+
+As we can see in @lst_compiler_help, the Waskell compiler supports several command-line options, such as specifying the input and output files, enabling debug mode, and printing intermediate results like the lexer output, AST, symbol table, desugared symbol table, and WAT output of the WebAssembly module. The debug mode flag enables allows for the enabling of the debug flags for the lexer, AST, symbol table, desugared symbol table, or WAT output. The `--no-merge` flag disables the merging of the generated WebAssembly module with the wasm lib file.
+
+After the generation of the WebAssembly module, the `main` function writes the output to a file specified by the user or to a default file name based on the input file name. The `main` proceeds to merge the generated WebAssembly module with the wasm lib file (more on this in @chp_wasm_lib) if the `--no-merge` flag is not used. The merged WebAssembly module is then written to the output file.
+
+The tool used for the merging of the WebAssembly module with the wasm lib file is the `wasm-merge` tool included in binaryen. To use the `wasm-merge` tool, the `main` function calls the `Command` struct from the `std::process` module to execute the `wasm-merge` command with the generated WebAssembly module and the wasm lib file as arguments. The output of the `wasm-merge` command is then written to the output file. An additional benefit of using the `wasm-merge` tool is that it, since it is part of the binaryen repository, it performs some basic optimizations on the WebAssembly module like dead code elimination and function inlining.
+
+In order to work on all platforms, a bash script to install the wasm-merge tool from the binaryen repository is included in the `waskellc` directory. The script downloads the binaryen repository and copies it to the `waskellc/binaryen-tools` directory. The main function then checks the platform and uses the appropriate binaryen tool for the merging of the WebAssembly module with the wasm lib file.
+
+== Lexer
+
+The lexer is implemented in the `src/ast_gen/lexer.rs` file (part of the `ast_gen` module. The lexer reads the input source code character by character and tokenizes it into a stream of tokens. The lexer recognizes keywords, identifiers, literals, and other syntactic elements in the source code. The lexer outputs a stream of tokens that are consumed by the parser.
+
+To simplify the implementation of the lexer, the `logos` crate is used to generate the lexer code from a lexer specification. To define a lexer, the programmer defines an enum with the token types and a `#[derive(Logos)]` attribute. The `Logos` derive macro generates the lexer code based on the token types and the lexer specification. Each token type is annotated with a regular expression that matches the token in the source code.
+
+The token types defined in the lexer are based on the syntax defined in @lst_lexical_syntax. The lexer recognizes keywords, identifiers, literals, and other syntactic elements in the source code. The lexer outputs a stream of tokens that are consumed by the parser.
+
+@lst_lexer shows a shortened version of the lexer implementation. The full implementation can be found in the `src/ast_gen/lexer.rs` file.
+
+#figure(
+  code_block[```rust
+  #[derive(Logos)]
+  #[logos(skip r"\s+")]
+  pub enum Token {
+      #[regex(r"[[[:lower:]]_][[[:word:]]']*", |lex| lex.slice().to_owned())]
+      VariableIdent(String),
+
+      // shortened regex for report
+      #[regex( r"case|class|data|...",
+          |lex| lex.slice().to_owned(),
+          priority = 100)]
+      ReservedIdent(String),
+
+      // ...
+
+      #[regex(r"--[^\n]*", logos::skip)]
+      LineComment,
+
+      // ...
+  }
+  ```],
+  caption: [A shortened version of the lexer implementation.],
+) <lst_lexer>
+
+The ```rust logos(skip r"\s+")``` attribute is used to skip whitespace characters in the input source code.
+
+The `VariableIdent` token type recognizes identifiers that start with a lowercase letter or underscore and are followed by any word character (a-z, A-Z, 0-9, \_) or an apostrophe. The identifier is captured as a string and stored in the token variant.
+
+The `ReservedIdent` token type recognizes reserved keywords in the functional language, such as ```haskell case```, ```haskell class```, ```haskell data```, and others. The keyword is captured as a string and stored in the token variant. The ```rust priority = 100``` attribute is used to give the token type a higher priority (default is 2) to ensure that reserved keywords are recognized before variable identifiers.
+
+The `LineComment` token type recognizes line comments that start with `--` and continue until the end of the line. The line comment is ignored by the lexer and not included in the stream of tokens (because of the ```rust logos::skip``` attribute).
+
+== Parser
+
+=== Syntax diagram translation
+
+=== Abstract syntax tree
+
+== Symbol Checker
+
+=== Symbol checking
+
+=== Symbol table
+
+== Type Checker
+
+=== Type checking type variables
+
+=== Desugaring
+
+== Code Generator
+
+=== WebAssembly library file <chp_wasm_lib>
+
+=== Implementation of lazy evaluation
+
+=== Implementation of pattern matching
+
+=== Encoding of data structures
+
+== Standard library
+
+The standard library of Waskell is implemented in the `lib/prelude.wsk` file. The standard library provides a set of functions and types that are commonly used in functional programming. The design of the standard library is based on the Haskell standard library documentation @haskell_prelude. To see the full list of functions and types in the standard library, refer to @chp_standard_library.
+
+In order to include the standard library in all Waskell programs, the code in the `lib/prelude.wsk` file is concatenated with the input source code before being passed to the lexer. This ensures that the standard library functions and types are available to the user without the need for explicit imports. An added benefit of this approach is that the standard library functions and types are optimized by the WebAssembly runtime along with the user-defined functions. It also allows for the standard library to be easily extended and modified by the user.
+
+A disadvantage of this approach is that the standard library functions and types are included in every WebAssembly module generated by the compiler, even if they are not used by the user. This can lead to larger WebAssembly modules and slower execution times due to the increased code size. To mitigate this issue, the `waskellc` compiler includes a `--no-merge` flag that disables the merging of the WebAssembly module with the wasm lib file. This allows the user to manually include the wasm lib file in their WebAssembly runtime and share it across multiple WebAssembly modules.
+
+If in the future the standard library becomes larger and more complex, it may be beneficial to split it into multiple files and modules to improve maintainability and organization. In this case, the introduction of a module system in Waskell would be necessary to allow the user to import specific modules from the standard library. But in the current state of the language, the standard library is kept simple and concise to avoid unnecessary complexity.
+
+== Testing and CI/CD
+
+The Waskell compiler is tested using automated tests on the functions of the standard library. The tests are written in Waskell itself and are located in the `waskellc/examples/prelude_test.wsk` file. The reason for only testing the standard library functions is that the compiler components (lexer, parser, symbol checker, type checker, and code generator) are difficult to test in isolation due to their interdependence and the implementation of such tests would be complex and time-consuming. By testing the standard library functions, the correctness of the compiler components is indirectly verified since the standard library functions exercise the compiler components during compilation.
+
+Inside of the `src/main.rs` file, there is a unit test that compiles the `prelude_test.wsk` file and runs the generated WebAssembly module with the wasmtime runtime. The unit test checks the exit status of the runtime and prints the output of the runtime to the console. If the runtime exits with a non-zero status, the unit test fails and the output of the runtime is printed to the console for debugging purposes.
+
+The tests in the `prelude_test.wsk` work by using a helper function `test` that takes a function for comparing the expected and actual values, a function to turn a value of that type into a string, the expected value, the actual value, and a string representing the name of the test. The `test` function then compares the expected and actual values using the comparison function and prints if the test passed or failed. In the case of a failure, the expected and actual values are printed to the console for debugging purposes.
+
+@lst_prelude_test shows an example of a test in the `prelude_test.wsk` file.
+
+#figure(
+  code_block[```haskell
+  test :: (a -> a -> Bool) -> (a -> String) -> a -> a -> String -> ();
+  test comparator printer x y name = if'
+    (comparator x y)
+    (print (name ++ " passed"))
+    (error (name ++
+        " failed, expected: " ++
+        (printer y) ++
+        " but got: " ++
+        (printer x))
+    );
+
+  mathTest :: ();
+  mathTest = test (==) intToString (add3 (3 * 4) (add3 1 2 (-4 `quot` 2)) (10 - 3)) 20 "mathTest";
+  ```],
+  caption: [An example of a test in the `prelude_test.wsk` file.],
+) <lst_prelude_test>
+
+The Waskell compiler uses GitLab CI/CD to automate the testing and deployment of the compiler. The CI/CD pipeline is defined in the `.gitlab-ci.yml` file and consists of two stages: `check` and `build`.
+
+The `check` stage runs a pre-commit hook that:
+
+- Formats the code using `cargo fmt` to ensure consistent code style.
+- Checks the code for warnings and errors using `cargo check`.
+- Lints the code using `clippy` to enforce best practices and idiomatic Rust code.
+- Runs the unit tests using `cargo test` to verify the correctness of the standard library functions.
+
+The `build` stage compiles the Waskell compiler using `cargo build` and releases the compiler as a binary artifact for different platforms (Linux, macOS, Windows). The binary artifacts are then available for download as a release on the GitLab repository (only triggered by a tag push).
+
+== Challenges
+
+#todo("challenges faced during the implementation of the compiler")
 
 // Challenges
 // - Implementing layout in the lexer difficult since I use a library that does not support it
@@ -1188,12 +1734,36 @@ The standard library of the functional language is a subset of the Haskell stand
 // - Issue with scanr and pattern matching
 // - Borrowing on symbol table and type checking
 
+=== Exporting functions for creating recursive data structures <chp_challenge_export>
+
 = Evaluation
+
+#todo("evaluation of the thesis, what was achieved, bugs and limitations, benchmarks")
 
 = Conclusion
 
-== Challenges
+#todo("summary of the thesis, objectives, results")
 
 == Future work
 
 == Personal opinion
+
+In this thesis, I have presented the design and implementation of a compiler for a functional programming language that targets WebAssembly. The compiler is implemented in Rust and consists of several components that work together to parse, type-check, and compile functional code to WebAssembly. The functional language is a subset of Haskell and includes features such as pattern matching, polymorphism, and lazy evaluation. The compiler translates the functional language constructs into WebAssembly instructions and generates a WebAssembly module that can be executed by a WebAssembly runtime.
+
+I have demonstrated the implementation of the compiler components, such as the lexer, parser, symbol checker, type checker, and code generator. I have also shown the design of the standard library, which includes functions for working with booleans, numbers, lists, tuples, and ratios. The standard library is based on the Haskell standard library and provides a set of functions and types that are commonly used in functional programming.
+
+This thesis has allowed me to explore and learn about the design and implementation of compilers, programming languages, and WebAssembly. I have gained experience in working with Rust, parsing, type checking, code generation, and WebAssembly. I have also learned about functional programming concepts, such as pattern matching, polymorphism, and lazy evaluation. It was overall a very fascinating and educational experience.
+
+If I were to start this project again, with the knowledge I have now, I would do the following thing differently.
+
+I would start by designing a minimal standard library that I could implement and test early on. This would allow me to test the compiler components with real code and ensure that the standard library functions are working correctly. After implementing the minimal standard library, I would gradually add more functions and types to cover a wider range of functionality. This approach is different from the one I took in this project, where I only did a minimal code example to test the compiler components. When I started implementing the standard library, I encountered several edge cases and issues that could have been avoided with a more incremental approach.
+
+I intend to continue working on this project and improving the compiler and standard library. I plan to fix the remaining issues, refactor the codebase, and add more features to the language and standard library. I also plan to write more tests, improve the error messages, and optimize the generated WebAssembly code. I find this project very interesting and challenging, and I look forward to continuing to work on it in my free time.
+
+== Acknowledgements
+
+I would like to thank my supervisors, Dr. Jacques Supcik and Dr. Serge Ayer, for their guidance, support, and feedback throughout this project. They helped me navigate the challenges of this project despite its large scope and complexity.
+
+I would also like to thank Dr. Baptiste Wicht and Mr. Valentin Bourqui for their help and advice throughout this project as external experts. Their expertise in project management, and software development was invaluable to me.
+
+Finally, I would like to thank my family and friends for their encouragement and understanding during this time. Their support has been invaluable to me, and I am grateful for their patience and encouragement.
