@@ -395,7 +395,7 @@ The only way to force the evaluation of an expression in Haskell is through patt
 
   take :: Int -> List a -> List a
   take 0 _ = Nil
-  take n Nil = Nil
+take n Nil = Nil
   take n (Cons x xs) = Cons x (take (n - 1) xs)
 
   list :: List Int
@@ -771,7 +771,7 @@ In summary, the compilation process in GHC consists of the following stages (see
 
 The following projects are similar to the project and provide insights into the design and implementation of compilers for functional languages. These projects illustrate that this kind of project is feasible and can be implemented within a reasonable timeframe.
 
-#heading("Asterius", level: 4, numbering: none, outlined: false)
+==== Asterius
 
 Asterius is a Haskell-to-WebAssembly compiler that translates Haskell source code into WebAssembly bytecode. The project has been archived since 2022 and the project is no longer maintained because Wasm compilation is now supported by GHC. The project was used as a reference for the project's compiler architecture. @asterius_compiler
 
@@ -779,7 +779,7 @@ Asterius supports FFI (Foreign Function Interface) for interacting with JavaScri
 
 Since the project is a compiler for Haskell and not a subset of Haskell, it is more complex than the project's compiler needs to be. The project will use a simpler architecture that directly translates the functional language subset into Wasm bytecode, so it can be more easily understood and implemented within the project's timeframe.
 
-#heading("Wisp", level: 4, numbering: none, outlined: false)
+==== Wisp
 
 Wisp is a Lisp-like language that compiles to WebAssembly implemented in Zig. This project is also no longer maintained. The language is similar to Common Lisp and provides a set of features for interactive development and debugging. @wisp_compiler
 
@@ -814,7 +814,7 @@ is as already mentioned a subset of Haskell. There is a language specification d
 
 The syntax diagrams in this section are based on the Haskell report @haskell_spec. The conventions used in the syntax diagrams are as follows:
 
-- Terminal symbols are shown in a monospaced font (e.g., `let`, `in`).
+- Terminal symbols are shown in a monospaced font and are inclosed in single or double quotes (e.g., `'let'`, `"in"`).
 - Non-terminal symbols are shown in math font (e.g., $"program"$, $"lexeme"$).
 - Repetition (one or more occurrences) is shown using braces (e.g., { $a$ }).
 - Alternatives are shown using vertical bars (e.g., $a$ | $b$).
@@ -835,39 +835,46 @@ The lexical syntax of Waskell is identical to Haskell. @lst_lexical_syntax shows
       Or[$"literal" | "special" | "reserved_id" | "reserved_op"$][]
     }),
     Prod($"whitespace"$, Or[$"whitechar"$ | $"line_comment"$ | $"block_comment"$][]),
-    Prod($"var_id"$, Or[$("small" { "small" | "large" | "digit" | #`_` })_⟨"reserved_id"⟩$][_VariableIdent_]),
-    Prod($"con_id"$, Or[$"large" { "small" | "large" | "digit" | #`_` }$][_ConstructorIdent_]),
-    Prod($"var_sym"$, Or[$("symbol"_⟨":"⟩ { "symbol" })_⟨"reserved_op"⟩$][_VariableSym_]),
-    Prod($"con_sym"$, Or[$(#`:` { "symbol" })_⟨"reserved_op"⟩$][_ConstructorSym_]),
+    Prod($"var_id"$, Or[$("small" { "small" | "large" | "digit" | #`'_'` })_⟨"reserved_id"⟩$][_VariableIdent_]),
+    Prod($"con_id"$, Or[$"large" { "small" | "large" | "digit" | #`'_'` }$][_ConstructorIdent_]),
+    Prod($"var_sym"$, Or[$("symbol"_⟨#`':'`⟩ { "symbol" })_⟨"reserved_op"⟩$][_VariableSym_]),
+    Prod($"con_sym"$, Or[$(#`':'` { "symbol" })_⟨"reserved_op"⟩$][_ConstructorSym_]),
     Prod($"literal"$, Or[$"integer" | "char" | "string"$][]),
-    Prod($"special"$, Or[`(` | `)` | `,` | `;` | `[` | `]` | ``` ` ``` | `{` | `}`][_Special_]),
+    Prod($"special"$, {
+      Or[$#`'('` | #`')'` | #`','` | #`';'` | #`'['` | #`']'` | #```'`'```$)][]
+      Or[$#`'{'` | #`'}'`$][_Special_]
+    }),
     Prod($"reserved_id"$, {
-      Or[`case` | `class` | `data` | `default` | `deriving`][]
-      Or[`do` | `else` | `foreign` | `if` | `import` | `in`][]
-      Or[`infix` | `infixl` | `infixr` | `instance` | `let`][]
-      Or[`module` | `newtype` | `of` | `then` | `type`][]
-      Or[`where` | `_`][_ReservedId_]
+      Or[$#`'case'` | #`'class'` | #`'data'` | #`'default'` | #`'deriving'`$][]
+      Or[$#`'do'` | #`'else'` | #`'foreign'` | #`'if'` | #`'import'` | #`'in'`$][]
+      Or[$#`'infix'` | #`'infixl'` | #`'infixr'` | #`'instance'` | #`'let'`$][]
+      Or[$#`'module'` | #`'newtype'` | #`'of'` | #`'then'` | #`'type'`$][]
+      Or[$#`'where'` | #`'_'`$][_ReservedId_]
     }),
-    Prod($"reserved_op"$, Or[`..` | `:` | `::` | `=` | `\` | `|` | `<-` | `->` | `@` | `~` | `=>`][_ReservedOp_]),
-    Prod($"whitechar"$, Or[`' '` | `\t` | `\n` | `\r` | `\f` | `\v`][]),
+    Prod($"reserved_op"$, {
+      Or[$#`'..'` | #`':'` | #`'::'` | #`'='` | #`'\'` | #`'|'` | #`'<-'`$][]
+      Or[$#`'->'` | #`'@'` | #`'~'` | #`'=>'`$][_ReservedOp_]
+    }),
+    Prod($"whitechar"$, Or[$#`' '` | #`'\t'` | #`'\n'` | #`'\r'` | #`'\f'` | #`'\v'`$][]),
     Prod($"line_comment"$, {
-      Or[`--`][]
-      Or[$#`--` { #`any character` } #`\n`$][_LineComment_]
+      Or[$#`'--'`$][]
+      Or[$#`'--'` { sans("any character") } #`'\n'`$][_LineComment_]
     }),
-    Prod($"block_comment"$, { Or[$#`{-` { #`any character` } #`-}`$][_BlockComment_] },),
+    Prod($"block_comment"$, { Or[$#`'{-'` { sans("any character") } #`'-}'`$][_BlockComment_] },),
     Prod($"small"$, Or[$sans("any lowercase letter")$][]),
     Prod($"large"$, Or[$sans("any uppercase letter")$][]),
     Prod($"digit"$, Or[$sans("any digit")$][]),
-    Prod($"symbol"$, Or[$sans("any symbol character")_⟨"special" | "_" | "\"" | "'"⟩$][]),
+    Prod($"symbol"$, Or[$sans("any symbol character")_⟨"special" | #`'_'` | #raw("'\"'") | #`"'"`⟩$][]),
     Prod($"integer"$, Or[$"digit" { "digit" }$][_Integer_]),
-    Prod($"char"$, Or[$#`'` "graphic"_⟨#`'`⟩ #`'`$][_Char_]),
-    Prod($"string"$, Or[$#`"` { "graphic"_⟨#`"`⟩ } #`"`$][_String_]),
+    Prod($"char"$, Or[$#`"'"` "graphic"_⟨#`"'"`⟩ #`"'"`$][_Char_]),
+    Prod($"string"$, Or[$#raw("'\"'") { "graphic"_⟨#raw("'\"'")⟩ } #raw("'\"'")$][_String_]),
     Prod($"graphic"$, {
       Or[$"digit" | "small" | "large" | "symbol" | "special"$][]
-      Or[`_` | `'` | `"`][]
+      Or[$#`'_'` | #`"'"` | #raw("'\"'") $][]
     }),
   )),
-  supplement: [Listing],
+  kind: "ebnf",
+  supplement: "EBNF",
   caption: [Lexical syntax of the functional language.],
 ) <lst_lexical_syntax>
 
@@ -879,77 +886,78 @@ The context-free syntax of Waskell is a subset of Haskell (defined in report @ha
 
 #figure(
   code_block(bnf(
-    Prod($"body"$, Or[$"declaration" { #`;` "declaration" [ #`;` ] }$][_TopDeclarations_]),
+    Prod($"body"$, Or[$"declaration" { #`';'` "declaration" [ #`';'` ] }$][_TopDeclarations_]),
     Prod($"declaration"$, Or[$"fun_bind" | "data_decl" | "foreign_decl"$][_TopDeclaration_]),
     Prod($"fun_bind"$, {
-      Or[$"fun_lhs" #`=` "exp"$][_FunctionDeclaration_]
+      Or[$"fun_lhs" #`'='` "exp"$][_FunctionDeclaration_]
       Or[$"fun_sign"$][_TypeSig_]
     }),
-    Prod($"data_decl"$, Or[$#`data` "simple_type" [ #`=` "constr" ]$][_DataDeclaration_]),
+    Prod($"data_decl"$, Or[$#`'data'` "simple_type" [ #`'='` "constr" ]$][_DataDeclaration_]),
     Prod($"foreign_decl"$, {
-      Or[$#`foreign import wasm` [ #`"lib"` ] "fun_sign"$][]
-      Or[$#`foreign export wasm` [ #`"unevaluated"` ] "fun_sign"$][]
+      Or[$#`'foreign import wasm'` [ #`'"lib"'` ] "fun_sign"$][]
+      Or[$#`'foreign export wasm'` [ #`'"unevaluated"'` ] "fun_sign"$][]
     }),
-    Prod($"fun_sign"$, Or[$("var_id" | #`(` "var_sym" #`)`) #`::` "fun_type"$][]),
+    Prod($"fun_sign"$, Or[$("var_id" | #`'('` "var_sym" #`')'`) #`'::'` "ftype"$][]),
     Prod($"simple_type"$, Or[$"con_id" { "var_id" }$][]),
-    Prod($"constr"$, Or[$"con_id" { #`|` "type" }$][]),
-    Prod($"fun_type"$, Or[$"type" { #`->` "type" }$][_FunctionType_]),
+    Prod($"constr"$, Or[$"con_id" { #`'|'` "type" }$][]),
+    Prod($"ftype"$, Or[$"type" { #`'->'` "type" }$][_FunctionType_]),
     Prod($"type"$, Or[$"type_elem" { "type_elem" }$][_Type_]),
     Prod($"type_elem"$, {
       Or[$"var_id"$][_TypeVariable_]
-      Or[$#`(` "fun_type" #`)`$][_ParenthesizedType_]
-      Or[$#`(` "fun_type" #`,` "fun_type" { #`,` "fun_type" } #`)`$][_TupleType_]
+      Or[$#`'('` "ftype" #`')'`$][_ParenthesizedType_]
+      Or[$#`'('` "ftype" #`','` "ftype" { #`','` "ftype" } #`')'`$][_TupleType_]
       Or[$"type_con"$][]
     }),
     Prod($"type_con"$, {
       Or[$"con_id"$][_TypeConstructor_]
-      Or[`()`][_Unit_]
-      Or[$#`(,` { #`,` } #`)`$][_TupleConstructor_]
+      Or[`'()'`][_Unit_]
+      Or[$#`'(,'` { space #`','` space } #`')'`$][_TupleConstructor_]
     }),
-    Prod($"fun_lhs"$, Or[$("var_id" | #`(` "var_sym" #`)`) space { "apat" }$][]),
+    Prod($"fun_lhs"$, Or[$("var_id" | #`'('` "var_sym" #`')'`) space { "apat" }$][]),
     Prod($"apat"$, {
-      Or[$"var_id" [#`@` "apat"]$][_AsPattern_]
+      Or[$"var_id" [#`'@'` "apat"]$][_AsPattern_]
       Or[$"pat_type_con"$][]
       Or[$"integer"$][_IntegerLiteral_]
       Or[$"char"$][_CharLiteral_]
       Or[$"string"$][_StringLiteral_]
-      Or[$#`_`$][_Wildcard_]
-      Or[$#`(` "pat" #`)`$][_ParenthesizedPattern_]
-      Or[$#`(` "pat" #`,` "pat" { #`,` "pat" } #`)`$][_TuplePattern_]
+      Or[$#`'_'`$][_Wildcard_]
+      Or[$#`'('` "pat" #`')'`$][_ParenthesizedPattern_]
+      Or[$#`'('` "pat" #`','` "pat" { #`','` "pat" } #`')'`$][_TuplePattern_]
     }),
     Prod($"pat"$, {
       Or[$"con_id" "apat" { "apat" }$][_ConstructorPattern_]
-      Or[$#`-` "integer"$][_NegatedIntegerLiteral_]
+      Or[$#`'-'` "integer"$][_NegatedIntegerLiteral_]
       Or[$"apat"$][_FunctionParameterPattern_]
     }),
     Prod($"pat_type_con"$, {
       Or[$"con_id"$][_ConstructorPattern_]
-      Or[`()`][_UnitPattern_]
-      Or[$#`(,` { #`,` } #`)`$][_EmptyTuplePattern_]
+      Or[`'()'`][_UnitPattern_]
+      Or[$#`'(,'` { space #`','` space } #`')'`$][_EmptyTuplePattern_]
     }),
     Prod($"exp"$, {
-      Or[$"lhs_exp" ("con_sym" | #``` ` ``` "var_id" #``` ` ```) "exp"$][_InfixedApplications_]
-      Or[$#`-` "exp"$][_NegatedExpression_]
-      Or[$"lhs_exp"$][_LeftHandSideExpression_]
+      Or[$"lexp" ("con_sym" | #```'`'``` "var_id" #```'`'```) "exp"$][_InfixedApplications_]
+      Or[$#`'-'` "exp"$][_NegatedExpression_]
+      Or[$"lexp"$][_LeftHandSideExpression_]
     }),
-    Prod($"lhs_exp"$, Or[$"fun_exp" { "fun_exp" }$][_FunctionApplication_]),
-    Prod($"fun_exp"$, {
+    Prod($"lexp"$, Or[$"fexp" { "fexp" }$][_FunctionApplication_]),
+    Prod($"fexp"$, {
       Or[$"exp_type_con"$][]
-      Or[$("var_id" | #`(` "var_sym" #`)`)$][_Variable_]
+      Or[$("var_id" | #`'('` "var_sym" #`')'`)$][_Variable_]
       Or[$"con_id"$][_Constructor_]
       Or[$"integer"$][_IntegerLiteral_]
       Or[$"char"$][_CharLiteral_]
       Or[$"string"$][_StringLiteral_]
-      Or[$#`(` "exp" #`)`$][_ParenthesizedExpr_]
-      Or[$#`(` "exp" #`,` "exp" { #`,` "exp" } #`)`$][_TupleExpr_]
+      Or[$#`'('` "exp" #`')'`$][_ParenthesizedExpr_]
+      Or[$#`'('` "exp" #`','` "exp" { #`','` "exp" } #`')'`$][_TupleExpr_]
     }),
     Prod($"exp_type_con"$, {
       Or[$"con_id"$][_Constructor_]
-      Or[`()`][_Unit_]
-      Or[$#`(,` { #`,` } #`)`$][_Empty_]
+      Or[`'()'`][_Unit_]
+      Or[$#`'(,'` { space #`','` space } #`')'`$][_Empty_]
     }),
   )),
-  supplement: [Listing],
+  kind: "ebnf",
+  supplement: "EBNF",
   caption: [Context-free syntax of the functional language.],
 ) <lst_context_free_syntax>
 
@@ -1130,6 +1138,8 @@ If a data constructor has type variables, the type variables must be declared in
   ```],
   caption: [Examples of simple types.],
 ) <lst_simple_types>
+
+A last note on data constructors is that, if they are used in an expression, they act as a function that constructs a value of the data type. For example, the expression `Just 42` constructs a value of the `Maybe Int` type using the `Just` data constructor. The data constructor can also be used in pattern matching to deconstruct values of the data type. For example, the pattern `Just x` matches values of the `Maybe Int` type constructed with the `Just` data constructor and binds the value `x` to the inner value.
 
 === Polymorphism <chp_polymorphism>
 
@@ -1640,21 +1650,779 @@ The `LineComment` token type recognizes line comments that start with `--` and c
 
 == Parser
 
+The parser is implemented in the `src/ast_gen/parser.rs` file (part of the `ast_gen` module). The parser reads the stream of tokens produced by the lexer and constructs an abstract syntax tree (AST) that represents the structure of the source code. The parser enforces the grammar rules of the functional language and reports syntax errors if the source code is not well-formed. The parser outputs the AST that is consumed by the validator.
+
+The parsing rules are defined using a recursive descent parser that follows the grammar defined in @lst_context_free_syntax. The parser uses pattern matching to match the tokens produced by the lexer and construct the AST nodes. The parser uses the `Token` enum defined by the lexer to match the token types and construct the AST nodes.
+
 === Syntax diagram translation
+
+The method used to implement the parser is inspired by the method used by Dr. Niklaus Wirth in his book "Compiler Construction" @wirth_compiler_construction. The method involves translating the syntax diagrams of the language into a set of mutually recursive functions that parse the input source code. The translation of the syntax diagrams into parsing functions is done manually by the programmer based on the grammar rules of the language.
+
+For every non-terminal symbol in the grammar, there is a corresponding parsing function that constructs the AST node for that non-terminal symbol. In the case of Rust and the Waskell compiler, the parsing functions are defined as methods of a struct or enum that represents the respective AST node.
+
+Lets take a look at an example from the Waskell parser. @lst_func_type_parser1 and @lst_list_functions2 shows a simplified version of the parsing function for the function type in the Waskell language (see @lst_context_free_syntax for the grammar rule).
+
+#figure(
+  code_block[```rust
+  pub struct FunctionType(pub Vec<Type>); // a function type is a list of types (the last type is the return type)
+
+  impl FunctionType {
+      fn parse(input: &mut TokenIter) -> Result<Self, String> {
+          let mut types = vec![];
+          loop {
+              types.push(Type::parse(input)?);
+              // this helper function takes the next token without consuming it
+              // the second argument determines if the token should be consumed
+              match next_token(input, true)? {
+                  Token::ReservedOperator(op) if op == "->" => {
+                      input.next(); // consume the '->' token
+                      continue;
+                  }
+                  _ => {
+                      break;
+                  }
+              }
+          }
+
+          Ok(FunctionType(types))
+      }
+  }
+  pub struct Type(pub Vec<TypeApplicationElement>); // a type is a list of type application elements
+
+  impl Type {
+      fn parse(input: &mut TokenIter) -> Result<Self, String> {
+          let mut types = vec![];
+          loop {
+              types.push(TypeApplicationElement::parse(input)?);
+              match next_token(input, true)? {
+                  // check if the type continues of if this is the end of the type signature
+                  Token::ReservedOperator(op) if op == "->" => {
+                      break;
+                  }
+                  _ => {}
+              }
+          }
+
+          Ok(Type(types))
+      }
+  }
+  ```],
+  caption: [The parsing function for the function type in the Waskell language part 1.],
+) <lst_func_type_parser1>
+
+#figure(
+  code_block[```rust
+  pub enum TypeApplicationElement {
+      /// Represents a type variable.
+      TypeVariable(String),
+      /// Represents a type constructor for a custom type (e.g. `Maybe`).
+      TypeConstructor(String),
+
+      // ... skipped for brevity
+  }
+
+  impl TypeApplicationElement {
+      /// Parse a type application element from the input token iterator.
+      fn parse(input: &mut TokenIter) -> Result<Self, String> {
+          match next_token(input, false)? {
+              Token::ConstructorIdent(ident) =>
+                  Ok(TypeApplicationElement::TypeConstructor(ident)),
+              Token::VariableIdent(ident) =>
+                  Ok(TypeApplicationElement::TypeVariable(ident)),
+
+              // ... skipped for brevity
+              t => Err(format!("Unexpected token: {:?}", t)),
+          }
+      }
+  }
+  ```],
+  caption: [The parsing function for the function type in the Waskell language part 2.],
+) <lst_func_type_parser2>
+
+It is sometimes necessary to use helper functions to parse more complex constructs. The `next_token` function is used to get the next token from the input stream without consuming it. The function takes a mutable reference to the token iterator and a boolean flag that determines if the token should be consumed. The function returns the next token from the input stream or an error message if the end of the input stream is reached.
 
 === Abstract syntax tree
 
-== Symbol Checker
+The AST nodes are defined as structs or enums that represent the different syntactic elements of the language. The AST nodes are used to represent expressions, statements, declarations, and other language constructs. The AST nodes are constructed by the parsing functions and form a tree structure that represents the structure of the source code.
+
+@lst_ast_top, @lst_ast_decl, @lst_ast_type, and @lst_ast_pattern show the types of AST nodes for the top-level declarations, function and data declarations, types, and patterns in the Waskell language.
+
+#figure(
+  code_block[```rust
+  /// Represents a list of top-level declarations in a Haskell module.
+  struct TopDeclarations(Vec<TopDeclaration>);
+
+  // helper type for the type signature - not an AST node directly
+  /// Represents the foreign import/export annotations for a function type signature.
+  enum IsForeign {
+      /// The function is imported from the WASM library.
+      LibImported,
+      /// The function is imported from a foreign module.
+      ForeignImported,
+      /// The function is exported in the WASM module.
+      Exported,
+      /// The function is exported but the parameters and return value are
+      /// unevaluated.
+      UnevaluatedExported,
+      /// The function is not foreign.
+      NotForeign,
+  }
+
+  enum TopDeclaration {
+      /// Represents a data declaration in a Haskell module.
+      DataDecl(DataDeclaration),
+      /// Represents a type signature or function declaration in a Haskell
+      /// module.
+      TypeSig {
+          /// name of the function
+          name: String,
+          /// type signature of the function
+          ty: FunctionType,
+          /// foreign import/export annotation
+          is_foreign: IsForeign,
+      },
+      /// Represents a function declaration in a Haskell module.
+      FunctionDecl(FunctionDeclaration),
+  }
+
+  ```],
+  caption: [The types of AST nodes for the top level declarations.],
+) <lst_ast_top>
+
+#figure(
+  code_block[```rust
+  /// Represents a function declaration in a Haskell module.
+  struct FunctionDeclaration {
+      /// The name of the function.
+      name: String,
+      /// The pattern matching for the function left-hand side.
+      lhs: Vec<FunctionParameterPattern>,
+      /// The right-hand side expression for the function.
+      rhs: Expression,
+  }
+
+  /// Represents a data declaration in a Haskell module.
+  struct DataDeclaration {
+      /// The name of the type constructor for the data declaration.
+      ty_constructor: String,
+      /// The type variables for the data declaration (can be empty if the data
+      /// declaration is a simple type).
+      ty_vars: Vec<String>,
+      /// The data constructors for the data declaration.
+      data_constructors: Vec<DataConstructor>,
+  }
+
+  /// Represents a data constructor in a Haskell module.
+  struct DataConstructor {
+      /// The name of the data constructor.
+      name: String,
+      /// The fields of the data constructor.
+      fields: Vec<TypeApplicationElement>,
+  }
+  ```],
+  caption: [The types of AST nodes for the function and data declarations.],
+) <lst_ast_decl>
+
+#figure(
+  code_block[```rust
+  /// Represents a type that can be a function type (e.g. `Int -> Int`, a
+  /// function that takes an `Int` and returns an `Int`) or a simple
+  /// type (e.g. `Int`).
+  struct FunctionType(Vec<Type>);
+
+  /// Represents a type application. It can be a simple type (e.g. `Int`) or
+  /// a type constructor (e.g. `Maybe Int`).
+  struct Type(Vec<TypeApplicationElement>);
+
+  /// Represents a type application element.
+  enum TypeApplicationElement {
+      /// Represents a unit type.
+      Unit,
+      /// Represents an unapplied tuple constructor.
+      TupleConstructor(i32),
+      /// Represents a tuple type.
+      TupleType(Vec<FunctionType>),
+      /// Represents a type variable.
+      TypeVariable(String),
+      /// Represents a parenthesized type (e.g. if an element of the type
+      /// signature is a function type).
+      ParenthesizedType(Box<FunctionType>),
+      /// Represents a type constructor for a custom type (e.g. `Maybe`).
+      TypeConstructor(String),
+  }
+  ```],
+  caption: [The types of AST nodes for the types and type applications.],
+) <lst_ast_type>
+
+#figure(
+  code_block[```rust
+  /// Represents a pattern for a function parameter in a function declaration.
+  enum FunctionParameterPattern {
+      /// Represents a variable pattern. It can be an `as` pattern (e.g. `x@p`)
+      /// or a simple variable
+      AsPattern(String, Option<Box<FunctionParameterPattern>>),
+      /// Represents a constructor pattern. In this case its matching against
+      /// a data constructor without any fields.
+      ConstructorPattern(String),
+      /// Represents a unit pattern. It matches against the unit type `()`.
+      UnitPattern,
+      /// Represents an empty tuple pattern. It matches against a tuple with
+      /// no elements.
+      EmptyTuplePattern(i32),
+      /// Represents a string literal pattern.
+      StringLiteral(String),
+      /// Represents an integer literal pattern.
+      IntegerLiteral(i32),
+      /// Represents a character literal pattern.
+      CharLiteral(char),
+      /// Represents a wildcard pattern. It matches against any value.
+      Wildcard,
+      /// Represents a parenthesized pattern. It is required for more complex
+      /// patterns.
+      ParenthesizedPattern(Box<Pattern>), // boxed because of indirect
+                                          // recursion with Pattern
+      /// Represents a tuple pattern. It matches against a tuple with one or
+      /// more elements.
+      TuplePattern(Vec<Pattern>),
+  }
+
+  /// Represents a more general pattern for negated integer literals and data
+  /// constructors with fields.
+  enum Pattern {
+      /// Represents a function parameter pattern.
+      FunctionParameterPattern(FunctionParameterPattern),
+      /// Represents a constructor pattern. It matches against a data
+      /// constructor with fields.
+      ConstructorPattern(String, Vec<FunctionParameterPattern>),
+      /// Represents a negated integer literal pattern.
+      NegatedIntegerLiteral(i32),
+  }
+  ```],
+  caption: [The types of AST nodes for the function parameter patterns.],
+) <lst_ast_pattern>
+
+#figure(
+  code_block[```rust
+  /// Represents a top level expression in a Haskell module.
+  enum Expression {
+      /// Represents an infixed application of an operator to two expressions
+      /// (an operator can be a variable identifier with backticks:
+      /// ``a `op` b`` or variable symbols: `a + b`).
+      InfixedApplication(Box<LeftHandSideExpression>, String, Box<Expression>),
+      /// Represents a negated expression (e.g. `-a`).
+      NegatedExpr(Box<Expression>),
+      /// Represents a left-hand side expression.
+      LeftHandSideExpression(Box<LeftHandSideExpression>),
+  }
+
+  /// Represents a left-hand side expression in a Haskell module (in this case
+  /// left-hand side means either the left-hand side of a infix expression or
+  /// just an expression that can't be represented in the [`Expression`] enum).
+  enum LeftHandSideExpression {
+      /// Represents a function application.
+      FunctionApplication(Vec<FunctionParameterExpression>),
+      // could be extended with other expressions like let, case, if, etc. in the future
+  }
+
+  /// Represents a parameter of a function application in a Haskell module.
+  enum FunctionParameterExpression {
+      /// Represents a string literal.
+      StringLiteral(String),
+      /// Represents an integer literal.
+      IntegerLiteral(i32),
+      /// Represents a character literal.
+      CharLiteral(char),
+      /// Represents a variable.
+      Variable(String),
+      /// Represents a constructor.
+      Constructor(String),
+      /// Represents an empty tuple.
+      EmptyTuple(i32),
+      /// Represents a unit value.
+      Unit,
+      /// Represents a parenthesized expression.
+      ParenthesizedExpr(Box<Expression>),
+      /// Represents a tuple expression.
+      TupleExpr(Vec<Expression>),
+  }
+  ```],
+  caption: [The types of AST nodes for the expressions.],
+) <lst_ast_expr>
+
+Since Rust has to know the size of the types at compile time, the AST nodes that contain recursive references to themselves (or other types that reference each other) are wrapped in a `Box` to make them indirect. The `Box` type is a smart pointer that allows for the allocation of heap memory for the type, but the ownership of the memory is transferred to the `Box` type. This allows for recursive references to be resolved at runtime and for the size of the type to be known at compile time.
+
+Each AST node has a corresponding parsing function that constructs the AST node based on the tokens produced by the lexer. The parsing functions are mutually recursive and follow the grammar rules of the language. The parsing functions construct the AST nodes by recursively calling each other and matching the tokens produced by the lexer.
+
+The value that gets returned from the parsing functions is a `Result` type that contains either a `TopDeclarations` value or an error message. The `Result` type is used to handle errors that occur during parsing, such as syntax errors or unexpected tokens. If an error occurs during parsing, the error message is returned to the caller, and the parsing process is stopped.
+
+=== AST example
+
+@lst_ast_example_in shows a simple Waskell program that defines an `id` function and a `not` function. The program consists of a type signature for the `id` function, a function declaration for the `id` function, a data declaration for the `Bool` type, a type signature for the `not` function, and two function declarations for the `not` function.
+
+#figure(
+  code_block[```haskell
+  id :: a -> a
+  id x = x
+
+  data Bool = True | False
+
+  not :: Bool -> Bool
+  not True = False
+  not False = True
+  ```],
+  caption: [A simple Waskell program.],
+) <lst_ast_example_in>
+
+@lst_ast_example_out shows the formatted (to fit in the report) version of the debug output of the AST for the simple Waskell program. The AST consists of a list of top-level declarations that represent the type signatures, function declarations, and data declarations in the source code.
+
+#figure(
+  code_block[```
+TopDeclarations([
+    TypeSig {
+        name: "id",
+        ty: FunctionType([
+          Type([TypeVariable("a")]), Type([TypeVariable("a")])
+        ]),
+        is_foreign: NotForeign,
+    },
+    FunctionDecl{
+        name: "id",
+        lhs: [AsPattern("x", None)],
+        rhs: LeftHandSideExpression(FunctionApplication([Variable("x")])),
+    },
+    TypeSig {
+        name: "print",
+        ty: FunctionType([Type([TypeConstructor("String")]), Type([Unit])]),
+        is_foreign: LibImported,
+    },
+    DataDecl {
+        ty_constructor: "Bool",
+        ty_vars: [],
+        data_constructors: [
+            DataConstructor { name: "True", fields: [] },
+            DataConstructor { name: "False", fields: [] },
+        ],
+    },
+    TypeSig {
+        name: "not",
+        ty: FunctionType( [
+            Type([TypeConstructor("Bool")]),
+            Type([TypeConstructor("Bool")]),
+        ]),
+        is_foreign: NotForeign,
+    },
+    FunctionDecl {
+        name: "not",
+        lhs: [ConstructorPattern("True")],
+        rhs: LeftHandSideExpression(
+          FunctionApplication([Constructor("False")])
+        ),
+    },
+    FunctionDecl {
+        name: "not",
+        lhs: [ConstructorPattern("False")],
+        rhs: LeftHandSideExpression(
+          FunctionApplication([Constructor("True")])
+        ),
+    },
+])
+  ```],
+  caption: [The debug output of the AST for a simple Waskell program.],
+) <lst_ast_example_out>
+
+== Validator
+
+The validator is the module that checks the AST for semantic errors, such as type errors, undefined variables, and invalid expressions. The validator ensures that the source code is semantically correct before proceeding to the next stage. The validator outputs a symbol table that is used by the code generator.
+
+This symbol table is a reduced form of the AST that contains only the necessary information for the code generator. The symbol table maps identifiers to scopes and is used to resolve variable references and enforce scoping rules. The symbol table is built by the symbol checker and is used by the type checker to check the types of expressions in the source code.
+
+=== Symbol Table
+
+The symbol table is a data structure that maps identifiers to scopes. The symbol table is used to resolve variable references and enforce scoping rules. The symbol table is built by the symbol checker and is used by the type checker to check the types of expressions in the source code.
+
+Since Rust uses a borrow checker to enforce memory safety, recursive data structures where the elements reference each other in a cycle can be difficult to implement. In a data structure where expressions can have references to symbols in any part of the program (essentially a graph), the use of simple references would lead to borrowing issues since the lifetime of the references would be difficult to determine.
+
+To solve this issue, Rust provides the `Rc` (reference-counted) smart pointer that allows for multiple ownership (read-only) of a value. The `Rc` type keeps track of the number of references to a value and deallocates the value when the number of references drops to zero. The `Rc` type is used to create a reference-counted symbol table that allows for multiple references to the same symbol across the AST.
+
+Since we do have situations where the symbols are modified, the `RefCell` type is used to allow for runtime borrow checking (the compiler is not capable of checking the borrow rules at compile time in this case). This means however that the programmer has to ensure that only one mutable reference to the symbol table is present at a time.
+
+The symbol table is implemented as a `HashMap` that maps identifiers to scopes. The `HashMap` is used to efficiently look up symbols by their identifiers and to enforce scoping rules. The symbol table is built by the symbol checker and is used by the type checker to check the types of expressions in the source code.
+
+The types and the expressions in the AST are simplified to allow for easier type checking and code generation. The types are checked against the symbol table to ensure that they exist and are used correctly. The expressions are desugared to simplify the AST and make it easier to generate WebAssembly code.
+
+As we will see later in the chapter, there also exists a type constructor table that maps type constructor names to their definitions. This table is used to check that the types used in the AST are defined and to resolve type constructor references.
+
+@lst_symbol_table_type, @lst_symbol_table_ty, @lst_symbol_table_expr, and @lst_symbol_table_case show the types used to represent the symbol table, types, and expressions in the Waskell compiler.
+
+#figure(
+  code_block[```rust
+  /// A type alias for the symbol table.
+  type SymbolTable = HashMap<String, Rc<RefCell<Symbol>>>;
+  /// A type alias for the type constructor table.
+  type TypeConstructorTable = HashMap<String, Rc<RefCell<TypeConstructor>>>;
+
+  /// A struct representing a symbol in the symbol table.
+  struct Symbol {
+      /// The name of the symbol.
+      name: String,
+      /// The type of the symbol.
+      ty: Type,
+      /// The expression of the symbol. This can be `None` if the symbol is a
+      /// data constructor for example.
+      expr: Option<Expression>,
+      /// The index of the data constructor in the type constructor. This can
+      /// be `None` if the symbol is not a data constructor.
+      data_constructor_idx: Option<usize>,
+      /// The foreign annotations of the symbol.
+      is_foreign: ast_gen::IsForeign,
+  }
+
+  /// A struct representing a type constructor in the type constructor table.
+  struct TypeConstructor {
+      /// The name of the type constructor.
+      name: String,
+      /// The type variables of the type constructor. Each type variable is a tuple of the type
+      /// variable name and the type constructor name.
+      type_vars: Vec<(String, String)>,
+      /// The data constructors of the type constructor as a vector of symbols.
+      data_constructors: Vec<Rc<RefCell<Symbol>>>,
+  }
+  ```],
+  caption: [The definition of the symbol table and type constructor table types.],
+) <lst_symbol_table_type>
+
+#figure(
+  code_block[```rust
+  /// An enum representing a type in the symbol table.
+  pub enum Type {
+      /// The `Int` type.
+      Int,
+      /// The `Char` type.
+      Char,
+      /// The function type with a vector of types. The last type is the
+      /// return type.
+      Function(Vec<Type>),
+      /// The `List` type with the type of the elements.
+      List(Box<Type>),
+      /// The `Tuple` type with a vector of types.
+      Tuple(Vec<Type>),
+      /// The `Unit` type.
+      Unit,
+      /// The type variable with the name of the variable and the name of the
+      /// symbol in which the variable is defined.
+      TypeVar {
+          /// The name of the type variable.
+          var_name: String,
+          /// The name of the symbol in which the type variable is defined.
+          ctx_symbol_name: String,
+      },
+      /// The custom type with the name of the type constructor and a vector
+      /// of types for the type application.
+      CustomType(String, Vec<Type>),
+  }
+  ```],
+  caption: [The definition of the types used to represent types of symbols in the symbol table.],
+) <lst_symbol_table_ty>
+
+#figure(
+  code_block[```rust
+  /// An enum representing an expression in the symbol table.
+  pub enum Expression {
+      /// The integer literal expression.
+      IntLiteral(i32),
+      /// The string literal expression.
+      StringLiteral(String),
+      /// The character literal expression.
+      CharLiteral(char),
+      /// The unit value expression.
+      UnitValue,
+      /// The symbol expression with a reference to the symbol in the symbol
+      /// table.
+      Symbol(Rc<RefCell<Symbol>>),
+      /// The scope symbol expression with the name of the symbol. This is
+      /// used for lambda abstractions and symbols defined in case
+      /// expressions.
+      ScopeSymbol(String),
+      /// The function application expression with a vector of expressions and
+      /// a boolean indicating whether the function is partially applied.
+      FunctionApplication {
+          /// The vector of expressions.
+          params: Vec<Expression>,
+          /// The boolean indicating whether the function is partially
+          /// applied.
+          is_partial: bool,
+      },
+      /// The tuple expression with a vector of expressions.
+      Tuple(Vec<Expression>),
+      /// The lambda abstraction expression with a vector of parameter names
+      /// and an expression.
+      LambdaAbstraction(Vec<String>, Box<Expression>),
+      /// The case expression with a [`CaseExpression`].
+      CaseExpression(CaseExpression),
+  }
+  ```],
+  caption: [The definition of the types used to represent expressions in the symbol table.],
+) <lst_symbol_table_expr>
+
+#figure(
+  code_block[```rust
+  /// A struct representing a case expression in the symbol table.
+  struct CaseExpression {
+      /// The input expression of the case expression.
+      input_expr: Box<Expression>,
+      /// The type of the input expression.
+      input_ty: Box<Type>,
+      /// The branches of the case expression.
+      branches: Vec<CaseBranch>,
+  }
+
+  /// A struct representing a case branch in the symbol table.
+  struct CaseBranch {
+      /// The pattern of the case branch.
+      pattern: CaseBranchPattern,
+      /// The expression of the case branch.
+      branch_expr: Expression,
+  }
+
+  /// An enum representing a case branch pattern in the symbol table.
+  enum CaseBranchPattern {
+      /// The integer literal pattern.
+      IntLiteral(i32),
+      /// The as pattern with the name of the parameter and an optional
+      /// pattern.
+      AsPattern(String, Option<Box<CaseBranchPattern>>),
+      /// The constructor pattern with the data constructor and a vector of
+      /// patterns.
+      Constructor {
+          /// A reference to the data constructor in the symbol table.
+          data_constructor: Rc<RefCell<Symbol>>,
+          /// The vector of patterns for the fields of the data constructor.
+          fields: Vec<CaseBranchPattern>,
+      },
+      /// The tuple pattern with a vector of patterns.
+      Tuple(Vec<CaseBranchPattern>),
+      /// The unit pattern.
+      Unit,
+      /// The wildcard pattern.
+      Wildcard,
+  }
+  ```],
+  caption: [The definition of the types used to represent case expressions in the symbol table.],
+) <lst_symbol_table_case>
 
 === Symbol checking
 
-=== Symbol table
+The symbol checker is responsible for building the symbol table that maps identifiers to scopes. The symbol table is used to resolve variable references and enforce scoping rules. The symbol checker traverses the AST and collects information about the identifiers used in the source code. The symbol checker ensures that each identifier is defined before it is used and that the scoping rules of the language are enforced.
 
-== Type Checker
+It works by first collecting all the data declarations and function declarations in the source code and adding them to a table of types. This table is later used by the symbol checker to check that the types used in signatures and data constructors exist. Since data constructors act as functions, when used in an expression, they are added to the symbol table as well.
 
-=== Type checking type variables
+The symbols for the data constructors have a field that contains the id of which data constructor they are within their type. This is used by the code generator to identify which data constructor it is in the memory representation.
 
-=== Desugaring
+The second step is to collect all the function signatures and add them to the symbol table but without the function bodies for now. This is done to allow for recursive functions. The function bodies are added to the symbol table after all the function signatures have been added.
+
+The types used in the AST are checked against the table of types to ensure that they exist and in the case of type applications, that the type constructor is used correctly. During this step the string type is transformed into a list of characters to allow for pattern matching on strings.
+
+The last step is to check the function bodies. The function bodies are checked against the symbol table to ensure that all the variables used in the function body are defined in the function signature. The symbol checker also does desugaring of the AST to further simplify the AST for the type checker and code generator.
+
+The following steps are taken to parse a function body:
+
++ If the function body has no arguments, the expression is just transformed the simplified expression.
++ If the function body has arguments, only one declaration, and the arguments are just variables (no patterns), the expression is transformed into a lambda expression. The reason for this is that the lambda expression is the only context (for now) in which non-top-level symbols can be defined. What this means is that only the expression of the lambda can use theses symbols.
++ In all other cases, a lambda expression is created with $n$ arguments (with generated names) where $n$ is the arity of the function. The body of the lambda is a case expression with the pattern matching the arguments of the function. The case branches are the declarations of the function. To group the arguments (if there are more than one) a tuple is used.
+
+=== Type checking
+
+The type checker is responsible for checking the types of expressions in the source code. The type checker uses the symbol table to resolve variable references and enforce type rules. The type checker traverses the symbol table to check the types of expressions and ensure that they are used correctly.
+
+The type checker iterates over all symbols in the symbol table and compares the types of the expression in the symbol with the type of the symbol itself. If the types do not match, the type checker reports a type error. If the symbol being checked has no expression, it is skipped.
+
+To evaluate the type of an expression the type checker first does the following things on the top level expression of the symbol being checked:
+
+#set enum(numbering: "1.1.", full: true)
+
++ It flattens all the function applications and types in the expression (e.g. `(f x) y` becomes `f x y`, `Int -> (Int -> Int)` becomes `Int -> Int -> Int`) and updates the expression in the symbol.
++ If the expression is a function application (the function was defined without any arguments), the expression is transformed into a lambda expression with arguments for each of the arguments in the function application and pushes these new arguments at the end of the function application.
+
+  This is done to remove any function definition that is a partial application (e.g. `f = (+) 1` becomes `f x = (+) 1 x`).
++ If the expression is a lambda expression, the type of the symbol is checked to verify if the right amount of arguments are present in the lambda expression.
+  + If the lambda expression has more arguments than the function signature, the type checker reports an error.
+  + If the lambda expression has less arguments than the function signature, the lambda expression is modified to include the missing arguments. The expression inside of the lambda is then transformed into a function application with the arguments of the lambda expression (e.g. `f x = (+) x` becomes `f x y = ((+) x) y`, which gets flattened to `f x y = (+) x y`).
+
+      Here again, the reason for this is to allow for partial application of top-level functions.
+  + All the arguments of the lambda expression are given the type from the function signature and passed to the function that checks the type of the expression inside of the lambda so that the type of the arguments is known when checking the expression.
++ If the expression is just a reference to another symbol, the type of the symbol simply gets returned. This would be a case where we define a function alias (e.g. `add = (+)`).
+
+The rest of the type checking is done by the type checker recursively traversing the expression and checking the types of the subexpressions. The type checker ensures that the types of the subexpressions match the expected types and reports type errors if the types do not match. The literals return the type of the literal (e.g. `IntLiteral(1)` returns `Int`), a lambda argument returns the type of the argument, a symbol returns the type of the symbol, etc.
+
+When type checking for a function application, the type checker checks that the function being applied is a function type and that the arguments match the expected types. It then returns the return type of the function (another function if the function is partially applied).
+
+When the type checker encounters a case expression, it checks if the pattern of the branches corresponds to the type of the input expression. If the pattern introduces new symbols, these symbols are added the scope of the type checking function. It finally also checks that the return types of all the branches are the same.
+
+=== Parameterized types
+
+The type checker also supports parameterized types. The type checker checks that the type variables used in the type signature are defined and that the type constructor is used correctly. The type checker also checks that the type variables are used consistently throughout the type signature.
+
+In the type checker, the type variables are resolved during the type checking process. A `HashMap` is used to map the type variables to their types. The goal of this map is to track the assignments of the type variables and to ensure that the type variables are used consistently throughout the type signature.
+
+When defining a type signature for a generic function like `map`, there are a few things to consider. When the generic arguments get used inside of the function body, the type variables can't take on a concrete type since it would limit the function to only work with that type.
+
+Another thing to look out for is the fact that type variables can be assigned to another type variable, belonging to a different function. In such a case it is important to check that no two type variables from the same function are assigned to the same type variable because it would limit the function to only work with that type and not two different types.
+
+@lst_ty_vars_error shows an example of a type signature that would cause an error in the type checker.
+
+The function `f` has two type variables `a` and `b`, which means this function can be used with any two types (e.g. `Int -> Char`, `Char -> Bool`, `Char -> Char`, etc.) but since the type variables are assigned to the same type variable, the function can only be used with one type. This would cause an error in the type checker.
+
+The function `g` has a type variable `a` that is assigned to a concrete type `Int`. This would also cause an error in the type checker since the function can only be used with the type `Int`.
+
+#figure(
+  code_block[```haskell
+  f :: a -> b
+  f x = x
+
+  g :: a -> a
+  g _ = 1
+  ```],
+  caption: [An example of a type signature that would cause an error in the type checker.],
+) <lst_ty_vars_error>
+
+The algorithm for checking the type variables uses the `HashMap` mentioned earlier. The key of the map is the name of the type variable and the name of the symbol in which the type variable is defined. The value of the map is a union find data node (a node of a disjoint set data structure), from the `disjoint_sets` crate, that contains the type of the type variable and the concrete type the variable took on (can be empty if not assigned). The union find data structure is used to track the assignments of the type variables and to ensure that the type variables are used consistently throughout the type signature.
+
+The disjoint set data structure is a data structure that keeps track of a set of elements partitioned into a number of disjoint (non-overlapping) subsets. It allows for two main operations: finding the representative of the set that an element belongs to and merging two sets together.
+
+The reason for using the union find data structure is that it allows for the type variables to be assigned to other type variables and to track the assignments of the type variables. The union find data structure is used to find the root of the type variable and to ensure that the type variables are used consistently throughout the type signature. A group of type variables that are assigned to the same type variable is in this case a set. When one of the type variables in the set is assigned to a concrete type, the type of the concrete type is assigned to all the type variables in the set.
+
+The algorithm for checking the type variables is as follows:
+
++ While checking the top-level expression of the symbol, the type checker initializes the map of type variables and passes it to the function that checks the type of the expression.
++ When the type checker compares two types, it checks:
+  + If one of the types is a type variable and the other not and if it is, it tries to assign the type of the type variable to the other type.
+  + If both types are type variables, it tries to merge the sets of the type variables.
+  + If both types are not type variables, it checks if they are the same type.
+  + If the types are nested (tuple, function, list, etc.), it recursively checks the types inside of the nested types.
+
+When the type of the expression is returned to the top-level expression check, the type checker checks that all the type variables present in the type of the symbol are in different sets. If they are not, the type checker reports an error. It also checks that no type variable is assigned to a concrete type.
+
+==== Generic function example
+
+@img_ty_var_map shows an example of the assignments that happen during the type checking of the generic function `map` that takes a function `f` and a list `xs` and applies `f` to each element of the list (see @lst_map). The type signature of the `map` function is ```haskell map :: (a -> b) -> List a -> List b```. The type variables `a` and `b` are used to represent the types of the elements in the input list and the output list.
+
+During the type checking process, the type variable `b` is unified with the type variable of the `Nil` and `Cons` constructors (`Nil` and `Cons` have signatures ```haskell Nil :: List a``` and ```haskell Cons :: a -> List a -> List a```). In @img_ty_var_map, the type variables are represented by the function they occur in and their name joined by a colon.
+
+The blue circles represent the sets in which the type variables are assigned. The type variable `b` is assigned to the type variable of the `Nil` and `Cons` constructors and the type variable `a` is assigned to nothing.
+
+#figure(
+  image("img/ty_var_map.png", width: 40%),
+  caption: [An example of the assignments during the type checking of `map`.],
+) <img_ty_var_map>
+
+==== Example of using a generic function
+
+@lst_double_list shows an example of using the `map` function to double the elements of a list. The `doubleList` function takes a list of integers and doubles each element using the `map` function.
+
+#figure(
+  code_block[```haskell
+  doubleList :: List Int -> List Int
+  doubleList = map ((*) 2)
+  ```],
+  caption: [An example of using the `map` function to double the elements of a list.],
+) <lst_double_list>
+
+In this case the type variables of the `map` function are assigned to the types of the `doubleList` function. The type variables `a` and `b` are assigned to the type `Int`. Since the return type of the `map` function is ```haskell List a```, the type variable `a` is assigned to the type `Int` and the return type of the `doubleList` function is ```haskell List Int```.
+
+Since the `doubleList` function has no type variables, there is no rule about the type variables being in the same set.
+
+@img_ty_var_use shows the assignments that happen during the type checking of the `doubleList` function. The concrete types are represented by a gray circle.
+
+#figure(
+  image("img/ty_var_use.png", width: 40%),
+  caption: [An example of the assignments during the type checking of `doubleList`.],
+) <img_ty_var_use>
+
+=== Example output
+
+@lst_symbol_table_example shows the debug output of the symbol for the `map` function in the `prelude.wsk` file. The symbol table contains the type signature of the `map` function, the foreign annotation, and the expression of the function.
+
+#set text(size: 10pt)
+
+#figure(
+  code_block[```
+  "map": Symbol {
+      name: "map",
+      ty: Function([
+          Function([
+              TypeVar { var_name: "a", ctx_symbol_name: "map" },
+              TypeVar { var_name: "b", ctx_symbol_name: "map" },
+          ]),
+          CustomType("List", [
+              TypeVar { var_name: "a", ctx_symbol_name: "map" }
+          ]),
+          CustomType("List", [
+              TypeVar { var_name: "b", ctx_symbol_name: "map" }
+          ]),
+      ]),
+      expr: Some(
+          LambdaAbstraction([":map_0", ":map_1"], CaseExpression {
+              input_expr: Tuple([
+                  FunctionParameter(:map_0),
+                  FunctionParameter(:map_1)
+              ]),
+              input_ty: Tuple([
+                  Function([
+                      TypeVar { var_name: "a", ctx_symbol_name: "map" },
+                      TypeVar { var_name: "b", ctx_symbol_name: "map" },
+                  ]),
+                  CustomType("List", [
+                      TypeVar { var_name: "a", ctx_symbol_name: "map" },
+                  ]),
+              ]),
+              branches: [
+                  CaseBranch {
+                      pattern: Tuple([Wildcard, Constructor(Nil, [])]),
+                      branch_expr: Symbol(Nil),
+                  },
+                  CaseBranch {
+                      pattern: Tuple([
+                          AsPattern(f, None),
+                          Constructor(Cons, [
+                              AsPattern(x, None),
+                              AsPattern(xs, None),
+                          ]),
+                      ]),
+                      branch_expr: FunctionApplication([
+                          Symbol(Cons),
+                          FunctionApplication([
+                              FunctionParameter(f),
+                              FunctionParameter(x),
+                          ], is_partial: false),
+                          FunctionApplication([
+                              Symbol(map),
+                              FunctionParameter(f),
+                              FunctionParameter(xs),
+                          ], is_partial: false),
+                      ], is_partial: false),
+                  },
+              ],
+          }),
+      ),
+      data_constructor_idx: None,
+      is_foreign: NotForeign,
+  }
+  ```],
+  caption: [The debug output of the symbol for the `map` function.],
+) <lst_symbol_table_example>
+
+#set text(size: 12pt)
+
+For reference, @lst_map shows the definition of the `map` function in the `lib/prelude.wsk` file.
+
+#figure(
+  code_block[```haskell
+  map :: (a -> b) -> List a -> List b
+  map f Nil = Nil
+  map f (Cons x xs) = Cons (f x) (map f xs)
+  ```],
+  caption: [The definition of the `map` function.],
+) <lst_map>
 
 == Code Generator
 
@@ -1745,6 +2513,14 @@ The `build` stage compiles the Waskell compiler using `cargo build` and releases
 #todo("summary of the thesis, objectives, results")
 
 == Future work
+
+// GC
+// More optimizations
+// More features
+// More tests
+// More documentation
+// Refactoring
+// Change function representation internally
 
 == Personal opinion
 

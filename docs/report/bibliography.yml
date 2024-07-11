@@ -124,3 +124,12 @@ wisp_compiler:
   author: Mikael Brockman
   url: https://github.com/mbrock/wisp
   date: 2022
+
+wirth_compiler_construction:
+  type: Book
+  title: Compiler Construction
+  author: Niklaus Wirth
+  date: 1996
+  editor: Addison-Wesley
+  publisher: Addison-Wesley
+  isbn: 0-201-40353-6
