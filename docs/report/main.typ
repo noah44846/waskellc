@@ -2426,6 +2426,8 @@ For reference, @lst_map shows the definition of the `map` function in the `lib/p
 
 == Code Generator
 
+The code generator is responsible for generating WebAssembly code from the AST. The code generator uses the symbol table to resolve variable references and enforce scoping rules. The code generator traverses the AST and generates WebAssembly instructions based on the expressions in the source code.
+
 === WebAssembly library file <chp_wasm_lib>
 
 === Implementation of lazy evaluation
@@ -2484,13 +2486,11 @@ The `check` stage runs a pre-commit hook that:
 
 The `build` stage compiles the Waskell compiler using `cargo build` and releases the compiler as a binary artifact for different platforms (Linux, macOS, Windows). The binary artifacts are then available for download as a release on the GitLab repository (only triggered by a tag push).
 
-== Challenges
+== Challenges <chp_challenge>
 
 #todo("challenges faced during the implementation of the compiler")
 
 // Challenges
-// - Implementing layout in the lexer difficult since I use a library that does not support it
-// - apply function generation because the type of the function being called indirectly is not known
 // - wasm_encode crate relies on order of functions in the module to be correct and that is a challenge to maintain
 // - merge the wasm-lib
 // - the apply function again but this time more generic (not only integer arguments) / unit type issues in general -> if import always remove return on unit, if export only remove for wrapper, else never remove
@@ -2504,23 +2504,60 @@ The `build` stage compiles the Waskell compiler using `cargo build` and releases
 
 === Exporting functions for creating recursive data structures <chp_challenge_export>
 
-= Evaluation
-
-#todo("evaluation of the thesis, what was achieved, bugs and limitations, benchmarks")
-
 = Conclusion
 
 #todo("summary of the thesis, objectives, results")
+// if not accieved say that benchmarking was not done
+
+All the objectives of the thesis were achieved. The Waskell compiler is capable of compiling a subset of Haskell to WebAssembly and running it in a WebAssembly runtime. The compiler is able to handle the core features of Haskell such as parametric polymorphism, pattern matching, and lazy evaluation. The compiler is also able to generate WebAssembly code that can be run in a WebAssembly runtime and produce the expected output. Embedding the WebAssembly runtime in different programming languages was also successful.
 
 == Future work
 
-// GC
-// More optimizations
-// More features
-// More tests
-// More documentation
-// Refactoring
-// Change function representation internally
+The Waskell compiler is a work in progress and there are several areas that could be improved and extended in the future. The following sections outline some of the potential future work that could be done to enhance the Waskell compiler.
+
+=== Garbage collection <chp_wasm_gc>
+
+Currently, the Waskell compiler allocates memory for the heap and stack but does not deallocate memory when it is no longer needed. This can lead to memory leaks and inefficient memory usage. Implementing a garbage collector in the WebAssembly runtime would allow the compiler to automatically manage memory and free up memory that is no longer in use. A garbage collector would improve the performance and reliability of the compiler by preventing memory leaks and reducing memory usage.
+
+There are different ways to approach garbage collection in WebAssembly. The first way would be to rely on the garbage collection proposal for WebAssembly that is currently in development (see @chp_wasm_gc). The proposal aims to add garbage collection support to WebAssembly and provide a standard interface for garbage collectors to interact with WebAssembly modules. By using the garbage collection proposal, the Waskell compiler could integrate with existing garbage collectors and benefit from automatic memory management.
+
+This first approach would be the most efficient and reliable way to implement garbage collection in WebAssembly. However, the garbage collection proposal is still in development and is not widely supported by WebAssembly runtimes. As an alternative, the Waskell compiler could implement a custom garbage collector in Rust that manages memory in the WebAssembly runtime. The custom garbage collector would be responsible for tracking memory allocations and deallocations and freeing up memory that is no longer in use. While this approach would be less efficient and reliable than using the garbage collection proposal, it would provide a way to implement garbage collection in WebAssembly without relying on experimental features.
+
+Implementing custom garbage collection in the WebAssembly runtime would be a challenging task that requires a deep understanding of memory management and garbage collection algorithms. A possible approach would be to implement a simple mark-and-sweep garbage collector that traverses the heap and identifies unreachable objects. For this there would be a need to make a table that tracks the references to the heap objects and every time a reference is created or removed, the table would be updated. The garbage collector would then free up memory for the unreachable objects and compact the heap to reduce fragmentation.
+
+=== Fix remaining issues
+
+There are several issues and limitations in the current implementation of the Waskell compiler that need to be addressed. These issues are explained in more detail in the challenges section (@chp_challenge). Some of the issues include:
+
+- The `scanr` function does not work correctly which could indicate some untested edge cases in the code generator.
+- The type checking of parametric polymorphism is not completely tested and could have some edge cases that are not handled correctly.
+- Generic functions that return another function do not work correctly in the type checker because the function type is internally uncurried.
+
+=== Layout rules
+
+The layout rules of the language could be improved to allow for more flexibility and expressiveness in the code. Currently, the layout rules are quite strict and require explicit indentation to define blocks of code. By relaxing the layout rules, the compiler could allow for more flexible code formatting and make the language more user-friendly. For example, the compiler could allow for optional indentation and use braces to define blocks of code. This would make the language more familiar to programmers coming from other languages and reduce the learning curve for new users.
+
+The reason for why they are not currently implemented is that the layout rules are a core feature of the language and changing them would require a significant redesign of the parser and lexer. The layout rules are also a key part of the language's design and contribute to its readability and elegance. However, by relaxing the layout rules, the compiler could provide more flexibility and expressiveness in the code and make the language more user-friendly.
+
+=== Refactoring
+
+The codebase of the Waskell compiler could be refactored to improve readability, maintainability, and performance. The codebase is currently quite large and complex, with many interdependent components that interact with each other. By refactoring the codebase, the compiler could be split into smaller modules and components that are easier to understand and maintain. This would make it easier to add new features, fix bugs, and optimize the compiler.
+
+=== More optimizations
+
+The Waskell compiler could be optimized to generate more efficient WebAssembly code and improve the performance of the generated code. There are several optimizations that could be implemented in the compiler, such as:
+
+- Constant folding: The compiler could evaluate constant expressions at compile time and replace them with their result. This would reduce the amount of computation needed at runtime and improve the performance of the generated code.
+- Dead code elimination: The compiler could remove code that is never executed from the generated WebAssembly module. This would reduce the size of the WebAssembly module and improve the performance of the runtime.
+- Tail call optimization: The compiler could optimize tail-recursive functions to avoid stack overflow errors and improve the performance of recursive functions.
+- Inline expansion: The compiler could inline small functions into their callers to reduce function call overhead and improve the performance of the generated code.
+- Call graph reduction: The GHC compiler uses a call graph reduction technique to evaluate functions in a lazy language. This technique could be implemented in the Waskell compiler to improve the performance of lazy evaluation and ensure that no unnecessary computations are performed.
+
+=== More features
+
+Right now the language is quite limited in terms of features and could be extended to support more advanced programming concepts. The main feature that would improve the language is the addition of type classes. Type classes are a powerful feature of Haskell that allows for ad-hoc polymorphism and type constraints. By adding type classes to the language, the compiler could support more advanced type checking and code generation techniques and enable more expressive and concise code.
+
+With type classes, the compiler could support Monads, Functors, Applicatives, and other advanced programming concepts that are commonly used in functional programming. Type classes would also allow for more advanced type inference and type checking techniques that could improve the performance and reliability of the compiler. Since IO is done with the IO monad in Haskell, the addition of type classes would also allow to implement pure IO in Waskell.
 
 == Personal opinion
 
