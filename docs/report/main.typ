@@ -61,8 +61,6 @@
   doc,
 )
 
-#todo_outline
-
 = Introduction
 
 This report documents the development of a functional language compiler to WebAssembly (Wasm). The project was conducted as part of the Bachelor's thesis at the #gls("heiafr"). The goal of the project was to design and implement a compiler for a functional language that targets Wasm. The project was supervised by Dr. Jacques Supcik and Dr. Serge Ayer, with Dr. Baptiste Wicht and Mr. Valentin Bourqui as experts. For further details,
@@ -94,6 +92,8 @@ Upon completion of the project, the following key objectives will be achieved:
 - *Language Documentation*: Provide documentation detailing the usage and development of the new language, including examples, references, and demonstrations of embedding into different language codebases to facilitate learning and adoption.
 
 While not production-ready after 7 weeks, the project will serve as a proof of concept and foundation for potential further development by delivering the defined language, compiler, documentation, and embedding examples. Refer to the requirements specification for more details on the objectives @spec_doc.
+
+#pagebreak()
 
 == Document structure
 
@@ -148,6 +148,8 @@ Advantages:
 Disadvantages:
 - Multi-paradigm nature and complex syntax may complicate the task of creating a purely functional subset.
 - OCaml is a vast language with many features, which may make it challenging to define a subset that is both expressive and manageable, given the author's limited experience with the language.
+
+#pagebreak()
 
 === F\#
 
@@ -209,6 +211,8 @@ Disadvantages:
 
 Elixir is a more recent functional language that builds upon the strengths of Erlang's VM and ecosystem. It aims to provide a more modern and productive syntax while maintaining the robustness and concurrency features of Erlang.
 
+#pagebreak()
+
 Advantages:
 - Functional programming paradigm aligned with the project's goals.
 - Elixir has a more modern syntax and tooling compared to Erlang.
@@ -235,6 +239,8 @@ Disadvantages:
 
 Considering the project's goals of creating a functional language subset tailored for efficient compilation to WebAssembly (Wasm), Haskell stands out as the most suitable choice. Its purely functional nature, advanced type system, existing tooling for Wasm compilation, and the author's familiarity with the language make it an ideal foundation for this project. Since the project has a limited timeframe of 7 weeks, the choice of a language subset that the author is most comfortable with, is crucial.
 
+#pagebreak()
+
 Since Haskell is a purely functional language, defining a subset that is both expressive and manageable within the project's timeframe should be feasible. Additionally, the motivation behind the project is to be able to leverage the strengths of functional programming within existing codebases, and Haskell's functional paradigm aligns perfectly with this goal. Since November 2022, GHC has supported the compilation of Haskell code to WebAssembly. This means that the project can use GHC as a reference for the compilation process.
 
 While other languages like OCaml, F\#, Lisp dialects, and the Beam languages have their strengths, their multi-paradigm nature or limited direct support for Wasm compilation could introduce additional complexities or hinder the efficient realization of the project's objectives.
@@ -255,6 +261,8 @@ For more details on the functional programming paradigm or more specifically on 
 #align(center)[https://wiki.haskell.org/Introduction]
 
 In the following sections, some key features of the functional programming paradigm that are relevant to the project will be discussed.
+
+#pagebreak()
 
 === Partial application and currying <chp_currying>
 
@@ -316,6 +324,8 @@ The `List` type is another example of an algebraic data type that represents a l
   caption: [Example of an algebraic data type in Haskell.],
 ) <lst_algebraic_data_types>
 
+#pagebreak()
+
 === Pattern matching
 
 Pattern matching is a powerful feature in functional programming that allows developers to destructure data structures and extract values based on their shape. It is often used in conjunction with algebraic data types to define functions that operate on different alternatives of a sum type.
@@ -345,7 +355,7 @@ The `List` type definition from @lst_algebraic_data_types can be used to define 
 
 === Parametric polymorphism
 
-Parametric polymorphism is a feature of functional programming languages that allows developers to write generic functions that operate on values of any type. It is achieved by introducing type variables that represent unknown types and can be instantiated with concrete types when the function is used. All type variables are universally quantifie, meaning that they can represent any type. When defining a function with type variables, the function needs to be correct for all possible types that the type variables can represent (because the type variables are universally quantified). So a function that has 2 type variables but these type variables are always the same type, the function won't compile. The `foo` function in @lst_parametric_polymorphism is an example of a parametrically polymorphic function in Haskell that doesn't compile.
+Parametric polymorphism is a feature of functional programming languages that allows developers to write generic functions that operate on values of any type. It is achieved by introducing type variables that represent unknown types and can be instantiated with concrete types when the function is used. All type variables are universally quantified, meaning that they can represent any type. When defining a function with type variables, the function needs to be correct for all possible types that the type variables can represent (because the type variables are universally quantified). So a function that has 2 type variables but these type variables are always the same type, the function won't compile. The `foo` function in @lst_parametric_polymorphism is an example of a parametrically polymorphic function in Haskell that doesn't compile.
 
 In Haskell, parametric polymorphism is achieved using type variables in function signatures. For example, the `id` function is a parametrically polymorphic function that takes a value of any type and returns the same value. The `id` function is defined as `id :: a -> a`, where `a` is a type variable that can represent any type. The `id` function is a common example of a parametrically polymorphic function that demonstrates the power of type variables in functional programming. @lst_parametric_polymorphism shows an example of the `id` function in Haskell.
 
@@ -755,6 +765,8 @@ This chapter is inspired by notes from a lecture on the GHC compiler at Stanford
 
 The Glasgow Haskell Compiler (GHC) is the most widely used Haskell compiler and provides a reference implementation for the Haskell language. GHC translates Haskell source code into intermediate representations (IRs) and eventually into machine code. The compilation process in GHC involves several stages, each performing specific tasks to optimize and generate efficient code.
 
+#pagebreak()
+
 In summary, the compilation process in GHC consists of the following stages (see @fig_ghc_compiler):
 + First the Haskell source code typed checked and desugared into a simplified intermediate representation (Core). This representation is very similar to the original Haskell code but all syntactical constructs are removed or transformed into only let and case statement. All pattern matching definitions for functions are also reduced to a lambda abstraction with a case statement. This enables to simplify the code and make it easier to optimize. The places where allocations take place (let bindings) and the place expressions get evaluated (case statements) are more clear to see and it is easier to reason about the execution order of the program.
 + The Core representation is then optimized using a set of optimization passes. These passes include inlining, constant folding, dead code elimination, and other optimizations that aim to improve the performance of the code. The optimizations are applied in a sequence of passes, each pass transforming the Core representation to a more optimized version.
@@ -767,6 +779,8 @@ In summary, the compilation process in GHC consists of the following stages (see
   image("img/ghc_compiler.png", width: 60%),
   caption: [Compilation process in the GHC Haskell compiler (taken form the lecture @ghc_compiler).],
 ) <fig_ghc_compiler>
+
+#pagebreak()
 
 === Other similar projects
 
@@ -1246,6 +1260,8 @@ Because of lazy evaluation, imported functions that return void are mapped to fu
   caption: [Examples of lazy evaluation.],
 ) <lst_lazy_evaluation>
 
+#pagebreak()
+
 === Embedding <chp_embedding>
 
 The embedding of Waskell code in other languages works by using the import and export features of Wasm. Any Waskell function can be exported to be used in other languages and any Wasm function can be imported to be used in Waskell. The import and export features are used to define foreign function interfaces (FFI) that allow functions written in different languages to interact with each other.
@@ -1378,9 +1394,6 @@ When exporting functions from Waskell, some times the function will be marked as
   )[0][1]
   memory = tree.memory
   store = wasmtime.loader.store
-  # Output:
-  # [3, 6, 9, 12, 15]
-  # [1, 2, 3]
   ```],
   caption: [Example of using embedded functions with the wasmtime runtime in a more complex example part 1.],
 ) <lst_embedding_usage_complex1>
@@ -1412,6 +1425,9 @@ When exporting functions from Waskell, some times the function will be marked as
   tree_ptr = create_waskell_tree(memory, store, empty, node, make_val, example_tree)
   flattened_ptr = flattenDfs(tree_ptr)
   print(parse_waskell_list(memory, store, flattened_ptr))
+  # Output:
+  # [3, 6, 9, 12, 15]
+  # [1, 2, 3]
   ```],
   caption: [Example of using embedded functions with the wasmtime runtime in a more complex example part 2.],
 ) <lst_embedding_usage_complex2>
@@ -1419,6 +1435,8 @@ When exporting functions from Waskell, some times the function will be marked as
 == Standard library <chp_standard_library>
 
 The standard library of the functional language is a subset (with some differences to account the lack of some language features) of the Haskell standard library (or the Prelude). The standard library provides a set of functions and types that are commonly used in functional programming. The standard library includes functions for working with lists, tuples, numbers, and other data types. The design of the standard library is based on the Haskell standard library documentation @haskell_prelude.
+
+#pagebreak()
 
 === Basic types
 
@@ -1464,6 +1482,8 @@ The standard library of the functional language is a subset (with some differenc
   ```],
   caption: [The list of functions for working with booleans.],
 ) <lst_boolean_functions>
+
+#pagebreak()
 
 === Numeric functions
 
@@ -1565,6 +1585,8 @@ The standard library of the functional language is a subset (with some differenc
   caption: [The list of functions for working with tuples.],
 ) <lst_tuple_functions>
 
+#pagebreak()
+
 === Ratio functions
 
 @lst_ratio_functions shows the list of functions for working with ratios in the standard library.
@@ -1603,6 +1625,8 @@ The standard library of the functional language is a subset (with some differenc
   ```],
   caption: [The list of miscellaneous functions.],
 ) <lst_misc_functions>
+
+#pagebreak()
 
 == Compiler architecture
 
@@ -2319,6 +2343,8 @@ The following steps are taken to parse a function body:
 + If the function body has arguments, only one declaration, and the arguments are just variables (no patterns), the expression is transformed into a lambda expression. The reason for this is that the lambda expression is the only context (for now) in which non-top-level symbols can be defined. What this means is that only the expression of the lambda can use theses symbols.
 + In all other cases, a lambda expression is created with $n$ arguments (with generated names) where $n$ is the arity of the function. The body of the lambda is a case expression with the pattern matching the arguments of the function. The case branches are the declarations of the function. To group the arguments (if there are more than one) a tuple is used.
 
+#pagebreak()
+
 === Type checking
 
 The type checker is responsible for checking the types of expressions in the source code. The type checker uses the symbol table to resolve variable references and enforce type rules. The type checker traverses the symbol table to check the types of expressions and ensure that they are used correctly.
@@ -2637,6 +2663,8 @@ The environment of a thunk is a structure that contains the pointer to the funct
 
 The memory representation for a partially applied function is a little different than the others. We know for a fact that when a value is evaluated it will never be a partially applied function. This means that there is no need to have a tag to indicate that the value is a partially applied function. Partially applied functions are temporary value that store the function and the arguments that have been applied to it to later be transformed into a thunk.
 
+#pagebreak()
+
 The structure of a partially applied function is as follows:
 
 - The first 4 bytes are the type index of the function that the partially applied function represents.
@@ -2716,6 +2744,8 @@ Two different wrappers (located in file `src/code_gen/encoder_wrapper.rs`) are u
 The second wrapper is used to keep track of the indices of the functions in the function section and in the table section. The order of the functions in the table section is important because the indices are used to call the functions in the WebAssembly module. The wrapper keeps track of the indices of the functions and their place in the table section. At the end of the code generation, this wrapper creates the table section, function section, import section, and element section in the correct order.
 
 The indices of imported functions are always the first indices in Wasm since the import section comes before the function section. To make sure that there is no issue with a function getting imported after other functions have been defined (this would shift the indices of the functions), the second wrapper works in 2 stages. In the first stage, it can only be used to import functions. In the second stage, it can only be used to define functions. This way the indices of the imported functions are always the first indices.
+
+#pagebreak()
 
 === Translation of the Symbol Table
 
@@ -2820,6 +2850,8 @@ The `check` stage runs a pre-commit hook that:
 
 The `build` stage compiles the Waskell compiler using `cargo build` and releases the compiler as a binary artifact for different platforms (Linux, macOS, Windows). The binary artifacts are then available for download as a release on the GitLab repository (only triggered by a tag push).
 
+#pagebreak()
+
 == Challenges <chp_challenge>
 
 The development of the Waskell compiler has been challenging due to the complexity of the WebAssembly runtime and the limitations of the WebAssembly language. The following sections describe some of the challenges encountered during the development of the compiler and the solutions that were implemented to overcome them.
@@ -2851,6 +2883,8 @@ As soon as the importing and exporting of functions was implemented, some functi
 When exporting functions that create recursive data structures, the `:full_eval` function would replace the fields of the data structure with the direct values of the fields. This is because the `:full_eval` function recursively evaluates the fields of the data structure and replaces the fields with the evaluated values. This is a problem when exporting functions that create recursive data structures since the data structure would be transformed into a non-recursive data structure.
 
 To solve this issue, the exported functions that create recursive data structures are annotated with `"unevaluated"`. This annotation is a temporary solution to the problem and allows the exported functions to create recursive data structures without being evaluated by the `:full_eval` function. In the future, the `:make_val` function could be modified to recursively wrap the fields of a data structure with `:make_val` so that the data structure can be passed to another Waskell function without any issues.
+
+#pagebreak()
 
 === Over-applied functions
 
