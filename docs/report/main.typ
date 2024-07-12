@@ -14,6 +14,7 @@
 #import "@preview/big-todo:0.2.0": *
 #import "@preview/cetz:0.2.2": canvas, plot
 #import "@preview/simplebnf:0.1.0": *
+#import "@preview/bytefield:0.0.6": *
 
 #set text(region: "ch", lang: "en")
 
@@ -64,7 +65,7 @@
 
 = Introduction
 
-This report documents the development of a functional language compiler to WebAssembly (Wasm). The project was conducted as part of the Bachelor's thesis at the #gls("heiafr"). The goal of the project was to design and implement a compiler for a functional language that targets Wasm. The project was supervised by Dr. Jacques Supcik and Dr. Serge Ayer, with Dr. Baptiste Wicht and Valentin Bourqui as experts. For further details,
+This report documents the development of a functional language compiler to WebAssembly (Wasm). The project was conducted as part of the Bachelor's thesis at the #gls("heiafr"). The goal of the project was to design and implement a compiler for a functional language that targets Wasm. The project was supervised by Dr. Jacques Supcik and Dr. Serge Ayer, with Dr. Baptiste Wicht and Mr. Valentin Bourqui as experts. For further details,
 please refer to the requirement specification document @spec_doc. The project repository can be found at the following URL.
 
 #align(center)[https://gitlab.forge.hefr.ch/noah.godel/24-tb-wasm-compiler]
@@ -1245,7 +1246,7 @@ Because of lazy evaluation, imported functions that return void are mapped to fu
   caption: [Examples of lazy evaluation.],
 ) <lst_lazy_evaluation>
 
-=== Embedding
+=== Embedding <chp_embedding>
 
 The embedding of Waskell code in other languages works by using the import and export features of Wasm. Any Waskell function can be exported to be used in other languages and any Wasm function can be imported to be used in Waskell. The import and export features are used to define foreign function interfaces (FFI) that allow functions written in different languages to interact with each other.
 
@@ -1324,6 +1325,96 @@ When exporting functions from Waskell, some times the function will be marked as
   ```],
   caption: [Examples of using embedded functions with the wasmtime runtime in Python.],
 ) <lst_embedding_usage>
+
+@lst_embedding_usage_complex1 and @lst_embedding_usage_complex2 shows examples of using embedded functions with the wasmtime runtime in a more complex example. This code interacts with the code of the `waskellc/examples/types.wsk` file.
+
+#figure(
+  code_block[```python
+  def bytes_to_int32(memory, store, ptr):
+      return memory.data_ptr(store)[ptr + 3] * 2**24 +
+         memory.data_ptr(store)[ptr + 2] * 2**16 +
+         memory.data_ptr(store)[ptr + 1] * 2**8 +
+         memory.data_ptr(store)[ptr]
+
+  def write_int32(memory, store, ptr, value):
+      memory.data_ptr(store)[ptr] = value & 0xFF
+      memory.data_ptr(store)[ptr + 1] = (value >> 8) & 0xFF
+      memory.data_ptr(store)[ptr + 2] = (value >> 16) & 0xFF
+      memory.data_ptr(store)[ptr + 3] = (value >> 24) & 0xFF
+
+  def parse_waskell_list(memory, store, list_ptr):
+      result = []
+      while True:
+          data_constr = bytes_to_int32(memory, store, list_ptr + 4)
+          if data_constr == 0:
+              break
+
+          data = bytes_to_int32(memory, store, list_ptr + 8)
+          result.append(data)
+          list_ptr = bytes_to_int32(memory, store, list_ptr + 12)
+      return result
+
+  def create_waskell_tree(memory, store, empty_fn, node_fn, make_val_fn, data):
+      def recurse(data):
+          if data is None:
+              return empty_fn()
+
+          l_ptr = recurse(data.get("l"))
+          r_ptr = recurse(data.get("r"))
+          val_ptr = make_val_fn(0, data.get("e"))
+          return node_fn(l_ptr, val_ptr, r_ptr)
+
+      res = recurse(data)
+      res = bytes_to_int32(memory, store, res + 1)
+      return res
+
+  flattenDfs = tree.flattenDfs
+  exampleTreeFlattened = tree.exampleTreeFlattened
+  empty = tree.empty
+  node = tree.node
+  # get the make_val function from the tree module (not a usual name for python)
+  make_val = list(
+    filter(lambda x: x[0] == ":make_val", inspect.getmembers(tree))
+  )[0][1]
+  memory = tree.memory
+  store = wasmtime.loader.store
+  # Output:
+  # [3, 6, 9, 12, 15]
+  # [1, 2, 3]
+  ```],
+  caption: [Example of using embedded functions with the wasmtime runtime in a more complex example part 1.],
+) <lst_embedding_usage_complex1>
+
+#figure(
+  code_block[```python
+  import inspect
+
+  import wasmtime.loader
+  import tree
+
+  list_ptr = exampleTreeFlattened()
+  print(parse_waskell_list(memory, store, list_ptr))
+
+  example_tree = {
+      "e": 2,
+      "l": {
+          "e": 1,
+          "l": None,
+          "r": None,
+      },
+      "r": {
+          "e": 3,
+          "l": None,
+          "r": None,
+      },
+  }
+
+  tree_ptr = create_waskell_tree(memory, store, empty, node, make_val, example_tree)
+  flattened_ptr = flattenDfs(tree_ptr)
+  print(parse_waskell_list(memory, store, flattened_ptr))
+  ```],
+  caption: [Example of using embedded functions with the wasmtime runtime in a more complex example part 2.],
+) <lst_embedding_usage_complex2>
 
 == Standard library <chp_standard_library>
 
@@ -1531,8 +1622,6 @@ The main components of the Waskell compiler are:
 - *Code Generator*: The code generator reads the symbol table produced by the validator and generates WebAssembly code that implements the functionality of the source code. The code generator translates the functional language constructs into WebAssembly instructions and emits a WebAssembly module that can be executed by a WebAssembly runtime.
 
 = Implementation
-
-#todo[add more details about the implementation of the compiler.]
 
 The implementation of the Waskell compiler is divided into several modules that correspond to the components of the compiler architecture. Each module is responsible for a specific task, such as lexing, parsing, symbol checking, type checking, and code generation. The modules work together to transform the source code into a WebAssembly module that can be executed by a WebAssembly runtime.
 
@@ -2428,13 +2517,258 @@ For reference, @lst_map shows the definition of the `map` function in the `lib/p
 
 The code generator is responsible for generating WebAssembly code from the AST. The code generator uses the symbol table to resolve variable references and enforce scoping rules. The code generator traverses the AST and generates WebAssembly instructions based on the expressions in the source code.
 
-=== WebAssembly library file <chp_wasm_lib>
+=== Wasm library <chp_wasm_lib>
 
-=== Implementation of lazy evaluation
+The Wasm library is a set of functions that are used during runtime to interact with the WebAssembly module. The WebAssembly library provides functions for printing strings, integers, and characters to the console, reading input from the console, and interacting with the memory of the WebAssembly module. It also contains helper functions to allocate memory, deallocate memory, create and execute thunk functions, partial applications, and encode data structures.
 
-=== Implementation of pattern matching
+The Wasm library is implemented in the `lib/lib.wat` file. It is written in WebAssembly text format (WAT) and is compiled to WebAssembly binary format (Wasm) using the Binaryen `wasm-merge` tool. This Wasm module is also merged with the `lib/rust_lib.rs` file (which is compiled to Wasm). The rust library contain the functions for allocating memory, deallocating memory, and printing strings to the console. This part of the library is implemented in Rust because it is easier to write and maintain the code in Rust than in WebAssembly text format.
 
-=== Encoding of data structures
+The allocation and deallocation of memory are done by creating a Rust vector with the specified size and then returning a raw pointer to the memory. Some unsafe Rust code is used to tell the borrow checker to forget about the vector so that the memory can be accessed by the WebAssembly module. This prevents the borrow checker from deallocating the memory when the vector goes out of scope. The deallocation of memory is done by converting the raw pointer back to a vector and then dropping the vector.
+
+The print function is implemented by converting a pointer to a Waskell string to a Rust string and then printing the Rust string to the console (more about the representation of strings in @chp_memory_rep).
+
+All the functions in the Wasm library are exported with names that have a colon in front of them (e.g. `:make_val`, `:make_thunk`, etc.). This is done to prevent name collisions with the user-defined functions and types in the WebAssembly module.
+
+==== Memory representation <chp_memory_rep>
+
+Wasm only supports integers and floats as primitive types. This means that strings, characters, and other data structures need to be encoded into integers and floats before being passed to the Wasm module. The memory representation of strings, characters, and data structures is done using a tagged union representation.
+
+@img_mem_rep_literal shows the memory representation of a literal value in the Wasm module. The first byte of the memory representation is used as a tag to indicate that the value is a literal. The tag is followed by the data of the value as a 32-bit integer (the numbers on top of the diagram represent the bytes in the memory representation).
+
+#figure(
+  bytefield(
+    bpr: 5,
+    bitheader(
+      "bytes",
+      0, [LSB],
+      1,
+      4, [MSB],
+    ),
+    bit(fill: red.lighten(30%))[`0x00`],
+    bits(4)[Data (32-bit integer)],
+  ),
+  kind: "bytefield",
+  supplement: "Byte Field",
+  caption: [The memory representation of a literal value.],
+) <img_mem_rep_literal>
+
+@img_mem_rep_data shows the memory representation of a Waskell data structure in the Wasm module. The first byte of the memory representation is used as a tag to indicate that the value is a data structure. The tag is followed by a pointer to the data structure in the memory.
+
+#figure(
+  bytefield(
+    bpr: 5,
+    bitheader(
+      "bytes",
+      0, [LSB],
+      1,
+      4, [MSB],
+    ),
+    bit(fill: red.lighten(30%))[`0x01`],
+    bits(4)[Pointer (32-bit integer)],
+  ),
+  kind: "bytefield",
+  supplement: "Byte Field",
+  caption: [The memory representation of a Waskell data structure.],
+) <img_mem_rep_data>
+
+Behind this pointer lies a structure that contains the number of fields the current data constructor has, the tag to identify the data constructor (e.g. 0 for `Nil` and 1 for `Cons`), and the pointers to the value for each field of the data constructor. @img_mem_rep_data_cons shows the memory representation of the `Cons` data constructor in the Wasm module.
+
+#figure(
+  bytefield(
+    bpr: 16,
+    bitheader(
+      "bytes",
+      0, [LSB],
+      4,
+      12,
+      15, [MSB],
+    ),
+    bits(4)[#text(10pt, "Length (2 in this case)")],
+    bits(4)[#text(10pt, "Data constructor idx")],
+    bits(4)[#text(10pt, "Pointer to value of current element")],
+    bits(4)[#text(10pt, "Pointer to value of next element")],
+  ),
+  kind: "bytefield",
+  supplement: "Byte Field",
+  caption: [The memory representation of the `Cons` data constructor.],
+) <img_mem_rep_data_cons>
+
+The thunk is a structure used to represent a function that has not been evaluated yet. The thunk is used to implement lazy evaluation in Waskell. The memory representation for a thunk is as follows: the first byte is a tag to indicate that the value is a thunk, the next 4 bytes are the index of the type of the function that the thunk represents (necessary for the apply function), and the last 4 bytes are the pointer to the function environment (the pointer to the function and the arguments).
+
+@img_mem_rep_thunk shows the memory representation of a thunk in the Wasm module.
+
+#figure(
+  bytefield(
+    bpr: 9,
+    bitheader(
+      "bytes",
+      0, [LSB],
+      1,
+      5,
+      8, [MSB],
+    ),
+    bit(fill: red.lighten(30%))[`0x02`],
+    bits(4)[Function type index],
+    bits(4)[Pointer to function environment],
+  ),
+  kind: "bytefield",
+  supplement: "Byte Field",
+  caption: [The memory representation of a thunk.],
+) <img_mem_rep_thunk>
+
+The environment of a thunk is a structure that contains the pointer to the function and the arguments of the function. To be able to do an indirect call in Wasm, the module uses a table of functions that are called by index. The first field of the environment is the table index of the function that the thunk represents and the rest of the fields are the arguments of the function. @img_mem_rep_env shows the memory representation of the environment (the function only has one argument in this case) of a thunk in the Wasm module.
+
+#figure(
+  bytefield(
+    bpr: 8,
+    bitheader(
+      "bytes",
+      0, [LSB],
+      4,
+      7, [MSB],
+    ),
+    bits(4)[#text(10pt, "Table index of function")],
+    bits(4)[#text(10pt, "pointer to value of argument 1")],
+  ),
+  kind: "bytefield",
+  supplement: "Byte Field",
+  caption: [The memory representation of the environment of a thunk.],
+) <img_mem_rep_env>
+
+The memory representation for a partially applied function is a little different than the others. We know for a fact that when a value is evaluated it will never be a partially applied function. This means that there is no need to have a tag to indicate that the value is a partially applied function. Partially applied functions are temporary value that store the function and the arguments that have been applied to it to later be transformed into a thunk.
+
+The structure of a partially applied function is as follows:
+
+- The first 4 bytes are the type index of the function that the partially applied function represents.
+- The next 4 bytes are the number of arguments that still need to be applied to the function.
+- The next 4 bytes represent the offset in the environment where the next argument should be stored.
+- The rest of the bytes are a pointer to the environment of the function (the environment is the same as the one used for thunks but not filled completely).
+
+@img_mem_rep_part shows the memory representation of a partially applied function in the Wasm module.
+
+#figure(
+  bytefield(
+    bpr: 16,
+    bitheader(
+      "bytes",
+      0, [LSB],
+      4,
+      12,
+      15, [MSB],
+    ),
+    bits(4)[#text(10pt, "Function type index")],
+    bits(4)[#text(10pt, "Number of arguments")],
+    bits(4)[#text(10pt, "Offset in environment")],
+    bits(4)[#text(10pt, "Pointer to environment")],
+  ),
+  kind: "bytefield",
+  supplement: "Byte Field",
+  caption: [The memory representation of a partially applied function.],
+) <img_mem_rep_part>
+
+==== Runtime functions
+
+The runtime functions are Wasm functions that are used during the execution of the WebAssembly module to interact with data structures and perform operations on them.
+
+Here is a list of the runtime functions:
+
+- `:make_val` - Takes a tag (0 for a literal, 1 for a data structure) and a either a 32-bit integer (for literals) or a pointer (for data structures), allocates memory for the value, and returns a pointer to the value.
+- `:make_thunk` - Takes a function type index and a pointer to the function environment, allocates memory for the thunk, and returns a pointer to the thunk.
+- `:make_env` - Takes a size, allocates memory for the environment, and returns a pointer to the environment (it is up to the caller to fill the environment with the correct values).
+- `:make_pap` - Takes a function type index, the number of arguments the function needs in total, the number of arguments that have been applied and an environment pointer, allocates memory for the partially applied function, and returns a pointer to the partially applied function.
+- `:add_to_pap` - Takes a pointer to a partially applied function, and a pointer to a value and adds the value to the environment of the partially applied function (note that the pap gets copied to a new location in memory to avoid mutating the original pap).
+- `:make_thunk_from_pap` - Takes a pointer to a partially applied function, and a pointer to an environment (containing the rest of the arguments) and transforms the partially applied function into a thunk.
+- `:full_eval` - Takes a pointer any value and evaluates it fully. If the value is a thunk, it evaluates the thunk and replaces the thunk with the result of the evaluation. If the value is a data structure, it evaluates all the fields of the data structure recursively. If the value is a literal, it does nothing.
+- `:eval` - Takes a pointer to a value and evaluates it partially. If the value is a thunk, it evaluates the thunk and replaces the thunk with the result of the evaluation. If the value is a data structure or a literal, it does nothing.
+- `:apply` - Takes the index of the type of the function that the thunk represents, a pointer to the function environment and evaluates the function with the arguments in the environment.
+
+  The type index is necessary since Wasm needs to know the type of the function to be able to call it, even when doing an indirect call. The `:apply` has a big switch statement that makes different calls to the functions in the runtime depending on the type of the function. This function is generated by the code generator because it needs to know all the types of the functions that are used in the program.
+- The last set of functions are artithmetic functions that are used to perform operations on integers. They wrap the WebAssembly instructions for adding, subtracting, multiplying, etc. integers so they can be called from the Waskell code. The functions are `+`, `-`, `*`, `quot`, `rem`, `==`, `/=`, `<`, `<=`, `>`, `>=`, `compare` and `intToChar`.
+
+=== Wasm Encoder <chp_wasm_encoder>
+
+The `wasm_encoder` crate is used to encode the WebAssembly instructions into a binary format. It provides a set of functions for encoding the WebAssembly instructions and writing them to a buffer.
+
+The crate works by having a type for every section of the WebAssembly module. The needed information for the section is stored and all the sections are combined into a `Module` type. The `Module` type is then encoded into a binary format using the `finish` function.
+
+The sections of the WebAssembly module are (in order):
+
+- The custom section - This section is used to store information that is not part of the WebAssembly standard (e.g. names of functions, debug information, etc.).
+- The type section - This section is used to define the types of every entity (functions, tables, memories, etc.).
+- The import section - This section is used to define the imports.
+- The function section - This section is used to store the function signatures of the functions.
+- The table section - This section is used to define the tables.
+- The memory section - This section is used to define the memory.
+- The global section - This section is used to define the global variables.
+- The export section - This section is used to define the exports.
+- The start section - This section is used to define the start function.
+- The element section - This section is used to define the elements of the tables.
+- The code section - This section is used to define the function bodies of the functions.
+- The data section - This section is used to define the data of the memory.
+- The data count section - This section is used to define the number of data segments in the data section.
+
+In this project, only the type section, import section, function section, table section, export section, element section, and code section are used. The other sections are not needed.
+
+Something to note is that the declaration of the function signature and the function body are separated in the WebAssembly module. This means that the order in which the functions signatures and the function bodies are defined in the WebAssembly module is important. The `wasm_encoder` crate relies on the order of the functions in the module to generate the correct WebAssembly module. Since this can make the code generation more complex, wrapping parts the `wasm_encoder` crate in a more user-friendly API would be beneficial.
+
+Two different wrappers (located in file `src/code_gen/encoder_wrapper.rs`) are used to generate the WebAssembly module. The first wrapper is used for the type section. A `HashMap` is used to store the types of the functions and their index in the type section. At the end of the code generation, the type section is generated by iterating over the `HashMap` and adding the types to the type section in order of their index. A benefit of using the `HashMap` is that it allows for easy lookup of the type of a function when used in the code generation to avoid duplication of types.
+
+The second wrapper is used to keep track of the indices of the functions in the function section and in the table section. The order of the functions in the table section is important because the indices are used to call the functions in the WebAssembly module. The wrapper keeps track of the indices of the functions and their place in the table section. At the end of the code generation, this wrapper creates the table section, function section, import section, and element section in the correct order.
+
+The indices of imported functions are always the first indices in Wasm since the import section comes before the function section. To make sure that there is no issue with a function getting imported after other functions have been defined (this would shift the indices of the functions), the second wrapper works in 2 stages. In the first stage, it can only be used to import functions. In the second stage, it can only be used to define functions. This way the indices of the imported functions are always the first indices.
+
+=== Translation of the Symbol Table
+
+@img_code_gen shows an overview of the code generation process. The code for the code generation is located in the `src/code_gen/wasm_generation.rs` file.
+
+#figure(
+  image("img/code_gen.png", width: 90%),
+  caption: [An overview of the code generation process.],
+) <img_code_gen>
+
+The symbol table is translated into the WebAssembly module by iterating over all the symbols in the symbol table and generating the WebAssembly instructions for each symbol. The symbol table is used to resolve variable references and enforce scoping rules during the code generation process.
+
+==== Foreign imports and exports
+
+The functions that are foreign imports or exported (e.g. functions given by the host environment or functions that will get used by the host environment) are treated specially.
+
+The imported functions receive a wrapper function that evaluates (with `:full_eval`) the arguments of the function passed by a call from another Waskell function. The result of the evaluation is then wrapped into a Waskell value (so a literal or a data structure using `:make_val`). This reduces the overhead the host environment has to do to pass a function to the WebAssembly module. When the imported function is called from the Waskell code, the wrapper function is called instead. The only imported functions that don't get wrapper functions are the ones annotated with `"lib"` (see @chp_embedding) since these functions are part of the Wasm library and already handle the evaluation of the arguments and result.
+
+The exported functions are wrapped in a function that wraps the arguments of the function (using `:make_val`) and then calls the Waskell function. The result of the function is then evaluated (with `:full_eval`) and returned to the host environment. The function that is exported is the wrapper function and not the actual function. This is also done to reduce the overhead of the host environment.
+
+The notable exception to this is the exported functions that are annotated with `"unevaluated"` (see @chp_embedding). These functions are used in the case where we want to export a function that creates a complex data structure. The way the `:full_eval` function works currently is that it recursively replaces the fields of a data structure with the direct values of the fields (integers are left as they are). So when the host environment calls a function that returns a complex data structure, to later pass it to another Waskell function, the `:make_val` doesn't transform it into a valid Waskell value.
+
+This annotation is a temporary solution to this problem. In the future, the `:make_val` function could be modified to recursively wrap the fields of a data structure with `:make_val` so that the data structure can be passed to another Waskell function without any issues.
+
+==== Function bodies
+
+Each function generates a new thunk from the given arguments, who themselves could be thunks. When a specific thunk is evaluated (with `:full_eval` or `:eval`), the function inside the thunk is called with the arguments in the environment of the thunk. As previously mentioned, the function internally makes a new thunk from the arguments and the function body. Since the implementation of the evaluation functions loops until a non-thunk value is found (in the case of `:full_eval` the fields of a data structure are also evaluated), the function will be called until the result is a non-thunk value.
+
+The function bodies are generated by traversing the expression of the symbol corresponding to the function. First code generator first looks at the top-level expression of the function and then recursively generates the code for the expressions inside the top-level expression. The code generator uses the symbol table to resolve variable references and enforce scoping rules during the code generation process.
+
+The following top-level expressions are handled by the code generator:
+- *Lambda abstractions* - The code generator takes the scope of the lambda abstraction and passes it to the function that generates the code for the expression inside the lambda abstraction. Then it takes the result of the code generation function and returns it.
+- *Function applications* - The code generator simply calls the function to generate the code for the expression and returns the result.
+- *Symbols* (function alias) - The code generator generates calls to the symbols in question, with the arguments of function, directly.
+- *All the literals* - The code generator generates the literals and the corresponding WebAssembly instructions. In the case of the string literals, the code generator generates a `List` data structure with the characters of the string
+
+The function that generates the code for the expressions is recursive and generates the code for any expression that is passed to it. It returns an index to a local variable of the function that contains the result of the expression. So if an expression has sub-expressions, the code generator generates the code for the sub-expressions and stores the result in a local variable. These local variables are then used in the parent expression to generate the final result.
+
+The following expressions are handled by the code generator:
+
+- *Literals* - The code generator generates the literals using a call to the `:make_val` function.
+- *Symbols* (possibly a partial application) - The code generator generates checks the arity of the function and generates a thunk or a partial application if the function is not fully applied.
+- *Tuple* - The tuples have automatically generated data constructors which are used to generate the data structure.
+- *Function application* - has two cases:
+  - if the function is a *symbol* - The code generator generates a thunk from the function and the arguments and returns the pointer to the thunk. If the function application is a partial application, the code generator generates a partial application and puts the arguments in the environment of the partial application.
+  - if the function is a *argument* of the parent lambda abstraction - In this case we are dealing with a function as value. In the code generator function passed as values are always partial applications. So in the case that the function application partial, the code generator generates a new partial application based on the old one and the new arguments. And of course, if the function application is not partial, it generates a applies the remaining arguments and generates a thunk from the lambda argument.
+- *Case expression* - The code generator generates a block for each branch of the case expression. Each branch makes checks on the input expression (evaluating the expression using `:eval` if necessary) and if a check fails, it jumps to the next branch. If none of the checks fail, expression of the branch is returned.
+
+  Here is the logic of the code generation for the different branches:
+  - If the pattern is a *wildcard*, the check always succeeds and the expression of the branch is returned.
+  - If the pattern is a *"as" pattern*, the code generator generates a new local variable and assigns the value of the input expression to the local variable. Then the code generator recursively generates the branch code for the optiona rest of the pattern (e.g. "as" pattern can have the form `a @ (Cons _ xs)`).
+  - If the pattern is a *constructor pattern* (tuple also included), the code generator evaluates the input expression and checks if the index of the data constructor matches the data constructor of the pattern. If there are fields in the pattern, the code generator recursively generates the code for the patterns of the fields.
+  - If the pattern is a *literal pattern*, the code generator evaluates the input expression and checks if the value of the input expression matches the literal value of the pattern.
 
 == Standard library
 
@@ -2488,28 +2822,71 @@ The `build` stage compiles the Waskell compiler using `cargo build` and releases
 
 == Challenges <chp_challenge>
 
-#todo("challenges faced during the implementation of the compiler")
+The development of the Waskell compiler has been challenging due to the complexity of the WebAssembly runtime and the limitations of the WebAssembly language. The following sections describe some of the challenges encountered during the development of the compiler and the solutions that were implemented to overcome them.
 
-// Challenges
-// - wasm_encode crate relies on order of functions in the module to be correct and that is a challenge to maintain
-// - merge the wasm-lib
-// - the apply function again but this time more generic (not only integer arguments) / unit type issues in general -> if import always remove return on unit, if export only remove for wrapper, else never remove
-// - The representing of PAPs at the top level for code generation
-// - Implementation of the parametric polymorphism and specifically assigning a function type to a type variable
-// - RCs and having mutliple mutalble references to the symbol while doing recursion -> consume symbol table clone the symbol and reinsert the modified symbol
-// - Exports and type variables and recursive types (temporary fix -> "unevaluated" tag on export) would need to remove difference between literal and complex datastructure and make make_val recursive
-// - Over applied functions don't work in the type checker because the function type is internally uncurried
-// - Issue with scanr and pattern matching
-// - Borrowing on symbol table and type checking
+=== Wasm encoder
+
+The `wasm_encoder` crate relies on the order of the functions in the WebAssembly module to be correct. This means that the order in which the functions are defined in the WebAssembly module is important for the correct generation of the WebAssembly module. The `wasm_encoder` crate does not provide a way to reorder the functions in the WebAssembly module, which makes it difficult to maintain the order of the functions in the module. To work around this limitation, the code generator uses wrappers to keep track of the indices of the functions in the module and ensure that the order of the functions is correct (see @chp_wasm_encoder).
+
+Before the wrappers were implemented, the order in which the functions were compiled was important. Since the symbol table is a `HashMap` the order in which the iterator gave the entries was unpredictable, the compilation order changed all the time. So sometimes the code generation would fail because the function was not defined yet, or even worse a function signature would associated with the wrong function body.
+
+=== Merging the wasm-lib
+
+Since merging Wasm module is not a quite common task, there are not many tools that can do it. The only tool that was found was the `wasm-merge` tool from the Binaryen project. There is not much documentation on how to use the tool and how it actually merges the modules.
+
+While trying to merge the Wasm library with the Wasm module, it was discovered that the `wasm-merge` overwrites the function table of the Wasm library with the function table of the Wasm module. The first fix was import the function table if the Wasm module.
+
+And since the Wasm module needs the Wasm library to be able to run, the entry point of the compiler was changed to be able to call the `wasm-merge` tool and automatically merge the Wasm library with the Wasm module. This way the user doesn't have to worry about merging the Wasm library with the Wasm module themselves.
+
+=== The apply function
+
+As previously mentioned, Wasm does not support indirectly function calls without knowing the type of the function. This means that the `:apply` function needs to know the type of the function that it is calling. The `:apply` function is generated by the code generator and needs to know all the types of the functions that are used in the program. This is done by generating a big switch statement that makes different calls to the functions in the runtime depending on the type of the function.
+
+In earlier versions of the compiler, the `:apply` function was hardcoded in the Wasm library. This was not a good solution since the function would have to be updated every time a new function type was added to the language. But for the time it was enough since there were only few different function types. Instead of receiving the id of a type, it received the number of arguments the function had (back then all function without exception returned an integer).
+
+As soon as the importing and exporting of functions was implemented, some functions could have no return type. This was a problem since the `:apply` function would always return an integer. The solution to pass the type index of the function to the `:apply` function instead of the number of arguments. Now it was also becoming clear that the `:apply` function would have to be generated by the code generator. For each function type of the Wasm module, a new case is automatically generated in the `:apply` function.
 
 === Exporting functions for creating recursive data structures <chp_challenge_export>
 
+When exporting functions that create recursive data structures, the `:full_eval` function would replace the fields of the data structure with the direct values of the fields. This is because the `:full_eval` function recursively evaluates the fields of the data structure and replaces the fields with the evaluated values. This is a problem when exporting functions that create recursive data structures since the data structure would be transformed into a non-recursive data structure.
+
+To solve this issue, the exported functions that create recursive data structures are annotated with `"unevaluated"`. This annotation is a temporary solution to the problem and allows the exported functions to create recursive data structures without being evaluated by the `:full_eval` function. In the future, the `:make_val` function could be modified to recursively wrap the fields of a data structure with `:make_val` so that the data structure can be passed to another Waskell function without any issues.
+
+=== Over-applied functions
+
+The type checker does not handle "over-applied" functions correctly. @lst_over_applied shows an example of what is meant by "over-applied" functions.
+
+#figure(
+  code_block[```haskell
+  const :: a -> b -> a;
+  const x _ = x;
+
+  id :: a -> a;
+  id x = x;
+
+  main :: Int;
+  main = const id 1 2;
+  ```],
+  caption: [An example of an "over-applied" function.],
+) <lst_over_applied>
+
+As we can see in the example, the `const` function is applied to the `id` function and two integers. This should be cause no problem since `const` returns the first argument and in this case the first argument is the function `id`. The second argument of `const` is the integer `1`, which is ignored. So this means that the `2` is applied to `id` and the result should be `2`. But the type checker does not handle this case correctly and gives an error.
+
+The reason for this is that the function type is internally uncurried to simplify the type checking and the code generation. Every partial application is manually checked by comparing the number of arguments that have been applied to the number of arguments the function needs. This means that in this case the `const` function is seen as a function that takes 3 arguments and not as a function that takes 2 arguments and returns a function that takes 1 argument.
+
+This issue has not yet been resolved and is a limitation of the current implementation of the compiler. The reason for why it has not been resolved is that it would require a significant redesign of the type checker and the code generator to handle this case correctly. The type checker would need to be able to handle functions that return other functions and the code generator would need to generate the correct WebAssembly instructions for these functions.
+
+=== Issue with scanr and pattern matching
+
+The `scanr` function does not work correctly in the current implementation of the compiler. The `scanr` function is used to apply a function to each element of a list from right to left and accumulate the results. The issue with the `scanr` function it the values of the list are not evaluating correctly. In the test the function is supposed to return a list of integers, which it does, but the integers are just the integer value corresponding to a memory address.
+
+This signifies that there is an edge case where the partial evaluation of the list is not working correctly. The issue is most likely in the code generation of the `scanr` function. The code generation of the `scanr` function is quite complex since it involves generating a recursive function that applies the function to each element of the list and accumulates the results. The issue could be in the recursive function that generates the list of results or in the code that generates the thunk for the recursive function.
+
 = Conclusion
 
-#todo("summary of the thesis, objectives, results")
-// if not accieved say that benchmarking was not done
-
 All the objectives of the thesis were achieved. The Waskell compiler is capable of compiling a subset of Haskell to WebAssembly and running it in a WebAssembly runtime. The compiler is able to handle the core features of Haskell such as parametric polymorphism, pattern matching, and lazy evaluation. The compiler is also able to generate WebAssembly code that can be run in a WebAssembly runtime and produce the expected output. Embedding the WebAssembly runtime in different programming languages was also successful.
+
+The only thing that had to be skipped was the benchmarking of the compiler. This was due to the time constraints of the thesis and an underestimation of the writing of the thesis. The benchmarking would have been done by comparing the performance of the Waskell compiler with the GHC compiler on a set of benchmarks. The benchmarks would have tested the performance of the compiler on different types of programs and measured the execution time and memory usage of the generated WebAssembly code.
 
 == Future work
 
