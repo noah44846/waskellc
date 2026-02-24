@@ -105,13 +105,13 @@ fn out_path(in_path: PathBuf) -> PathBuf {
 fn merge_command(out_path: PathBuf, wasm_lib_path: PathBuf) -> Result<(), anyhow::Error> {
     let mut cmd;
 
-    if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
+    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
         cmd = Command::new("./binaryen-tools/x86_64/windows/bin/wasm-merge.exe");
-    } else if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         cmd = Command::new("./binaryen-tools/x86_64/linux/bin/wasm-merge");
-    } else if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
         cmd = Command::new("./binaryen-tools/x86_64/macos/bin/wasm-merge");
-    } else if cfg!(target_os = "macos") && cfg!(target_arch = "arm64") {
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         cmd = Command::new("./binaryen-tools/arm64/macos/bin/wasm-merge");
     } else {
         return Err(anyhow!("Unsupported platform"));

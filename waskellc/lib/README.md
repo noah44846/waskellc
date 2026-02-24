@@ -3,12 +3,12 @@
 If the wasm32-unknown-unknown target is not installed, install it with:
 
 ```bash
-$ rustup target add wasm32-wasi
+$ rustup target add wasm32-wasip1
 ```
 
 To compile the library, run:
 
 ```bash
-$ rustc --target wasm32-wasi -o rust_lib.wasm rust_lib.rs
+$ rustc --target wasm32-wasip1 -o rust_lib.wasm rust_lib.rs
 $ ../binaryen-tools/x86_64/linux/bin/wasm-merge -all rust_lib.wasm rust_lib lib.wat lib -o lib.wasm
 ```
